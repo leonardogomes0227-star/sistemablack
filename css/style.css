@@ -239,3 +239,64 @@ table.t{width:100%;border-collapse:collapse}
   body.print-modal .modal{box-shadow:none;max-width:none}body.print-modal .modal-f,body.print-modal .icon-btn{display:none}
   .card{box-shadow:none}
 }
+
+/* ===== acabamento visual (identidade: poste de barbeiro, latão, tipografia condensada) ===== */
+:root{--bg:#efede8;--r:12px;--shadow:0 1px 2px rgba(20,20,22,.04),0 4px 14px rgba(20,20,22,.04);--brass:#b0802d}
+.card{box-shadow:var(--shadow);border-color:#e6e3dc}
+.page-h h1,.hero h1{font-family:"Barlow Condensed",Inter,sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.03em;font-size:34px;line-height:1.05}
+.page-h{margin-bottom:26px;padding-bottom:18px;border-bottom:1px solid var(--line-2);position:relative}
+.page-h::after{content:"";position:absolute;left:0;bottom:-1px;width:56px;height:3px;background:var(--brass)}
+.page-h p{font-size:14px}
+.kpi{padding:18px 20px}
+.kpi small{text-transform:uppercase;letter-spacing:.07em;font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.kpi b{font-family:"Barlow Condensed",Inter,sans-serif;font-size:38px;font-weight:600;letter-spacing:0;margin:6px 0 4px;line-height:1}
+.card-h{padding:16px 20px}.card-h h3{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2);font-weight:700}
+.card-b{padding:20px}
+.t td{padding:13px 16px}.t th{background:transparent;border-bottom:1px solid var(--line-2)}
+.t tbody tr:nth-child(even) td{background:#fcfbf9}
+.t tbody tr[data-act]:hover td{background:#f4efe4}
+.btn{height:38px;border-radius:8px;font-weight:600}.btn-sm{height:30px}
+.btn-primary{background:var(--side);border-color:var(--side)}
+.chip.on{background:var(--side);border-color:var(--side)}
+.badge{font-weight:600;letter-spacing:.01em}
+.who{padding:8px 10px}
+/* barra lateral */
+.side{background:var(--side);padding-top:0;border-right:0}
+.side::before{content:"";display:block;margin:0 -12px 0;height:6px;background:repeating-linear-gradient(135deg,#efede8 0 8px,var(--brass) 8px 16px,#141416 16px 24px);flex:none}
+.side .wordmark{padding:22px 10px 20px;font-size:21px}
+.nav a{padding:10px 12px;border-radius:8px;font-weight:500}
+.nav a.on{background:#25252a;box-shadow:inset 3px 0 0 var(--brass);color:#fff}
+.nav a.on .ic{color:#d9a84a}
+.nav-g{padding-top:18px}
+/* faixa de abertura do painel */
+.hero{position:relative;overflow:hidden;background:var(--side);color:#fff;border-radius:14px;padding:28px 36px 28px 32px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end}
+.hero .pole{position:absolute;right:0;top:0;bottom:0;width:14px;background:repeating-linear-gradient(135deg,#efede8 0 10px,var(--brass) 10px 20px,#141416 20px 30px)}
+.hero-eyebrow{display:block;color:#9a9aa2;font-size:13px;margin-bottom:6px}
+.hero h1{font-size:46px;color:#fff;margin-bottom:18px}
+.hero-acts{display:flex;gap:8px;flex-wrap:wrap}
+.btn-ghost-d{background:transparent;color:#fff;border-color:#3b3b42}.btn-ghost-d:hover{background:#25252a}
+.hero-n{text-align:right;padding-right:14px}
+.hero-n small{display:block;text-transform:uppercase;letter-spacing:.09em;font-size:12px;color:#9a9aa2;font-weight:600}
+.hero-n b{display:block;font-family:"Barlow Condensed",Inter,sans-serif;font-weight:600;font-size:68px;line-height:1;color:#e0b055;margin:4px 0 6px}
+.hero-n .kpi-line{justify-content:flex-end;color:#9a9aa2;font-size:12.5px}
+.hero .delta.up{color:#6fd1a2}.hero .delta.down{color:#f08a82}
+/* agenda e gráficos */
+.appt{background:color-mix(in srgb,var(--c) 11%,#fff);border-color:color-mix(in srgb,var(--c) 28%,#fff)}
+.appt.st-done{background:color-mix(in srgb,var(--c) 7%,#f1f6f3)}
+.appt.st-live{background:var(--brass-bg);border-color:var(--brass)}
+.ag-head{padding:12px}
+.bar{background:#d5d1c7;border-radius:4px 4px 0 0}.bar.hl{background:var(--brass)}
+.progress{height:12px}.progress div{background:var(--brass)}
+.hbar-track{height:10px}
+/* login */
+.login-art{padding:56px}
+.login-art h1{font-size:76px;line-height:.95;max-width:520px}
+.login-art .pole{right:56px;width:30px}
+.login-form h2{font-family:"Barlow Condensed",Inter,sans-serif;font-size:34px;text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.modal{border-radius:14px}
+.modal-h h3{font-family:"Barlow Condensed",Inter,sans-serif;font-size:24px;text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+@media(max-width:860px){
+  .page-h h1,.hero h1{font-size:28px}.hero{grid-template-columns:1fr;padding:22px 26px 22px 20px}.hero h1{font-size:36px;margin-bottom:14px}
+  .hero-n{text-align:left;padding-right:10px}.hero-n .kpi-line{justify-content:flex-start}.hero-n b{font-size:52px}
+  .kpi b{font-size:32px}.side::before{margin:0 -12px}
+}

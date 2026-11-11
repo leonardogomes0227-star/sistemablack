@@ -37,7 +37,7 @@ function render(top) {
   if (!allowed(UI.route)) UI.route = firstRoute();
   const v = $('#view'); const y = window.scrollY;
   v.innerHTML = VIEWS[UI.route]();
-  if (!$('.demo-tag')) { const h = $('.page-h h1', v); if (h) h.insertAdjacentHTML('beforeend', '<span class="demo-tag">Demonstração</span>'); }
+  if (!$('.demo-tag')) { const h = $('.page-h h1, .hero h1', v); if (h) h.insertAdjacentHTML('beforeend', '<span class="demo-tag">Demonstração</span>'); }
   $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === UI.route));
   document.body.classList.remove('nav-open');
   window.scrollTo(0, top ? 0 : y);

@@ -41,11 +41,13 @@ VIEWS.dashboard = () => {
 
   const hr = new Date().getHours(); const saud = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
   return `
-  <div class="page-h"><div><h1>${saud}</h1><p>${cap(fmtLong(TODAY))}</p></div>
-    <div class="acts"><button class="btn" data-act="newSale">${ic('receipt', 16)} Nova venda</button><button class="btn btn-primary" data-act="newAppt">${ic('plus', 16)} Novo agendamento</button></div></div>
-  <div class="grid g4 keep2">
-    <div class="card kpi"><small>Faturamento hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span class="sub">vs. mesmo dia semana passada</span></div></div>
-    <div class="card kpi"><small>Atendimentos hoje</small><b>${feitos} <span class="muted" style="font-size:16px;font-weight:500">/ ${ap.length}</span></b><div class="sub">${ap.length - feitos} restante(s) na agenda</div></div>
+  <section class="hero"><span class="pole" aria-hidden="true"></span>
+    <div><span class="hero-eyebrow">${cap(fmtLong(TODAY))}</span><h1>${saud}</h1>
+      <div class="hero-acts"><button class="btn btn-brass" data-act="newAppt">${ic('plus', 16)} Novo agendamento</button><button class="btn btn-ghost-d" data-act="newSale">${ic('receipt', 16)} Nova venda</button></div></div>
+    <div class="hero-n"><small>Faturamento hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span>vs. mesmo dia da semana passada</span></div></div>
+  </section>
+  <div class="grid g3 mt">
+    <div class="card kpi"><small>Atendimentos hoje</small><b>${feitos} <span class="muted" style="font-size:18px;font-weight:500">/ ${ap.length}</span></b><div class="sub">${ap.length - feitos} restante(s) na agenda</div></div>
     <div class="card kpi"><small>Faturamento do mês</small><b>${brl0(mes)}</b><div class="kpi-line">${delta(mes, mesPas)}<span class="sub">vs. ${MESES[+pm.slice(5) - 1].toLowerCase()} até hoje</span></div></div>
     <div class="card kpi"><small>Ticket médio do mês</small><b>${brl(ms.ticket)}</b><div class="sub">${ms.n} atendimentos pagos</div></div>
   </div>
