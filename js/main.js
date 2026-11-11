@@ -1,15 +1,15 @@
 'use strict';
 const NAV = [
-  ['Operação', [['dashboard', 'Painel', 'grid', ['dono', 'recepcao']], ['agenda', 'Agenda', 'calendar', ['dono', 'recepcao', 'barbeiro']], ['caixa', 'Caixa', 'receipt', ['dono', 'recepcao']], ['clientes', 'Clientes', 'users', ['dono', 'recepcao', 'barbeiro']]]],
+  ['Operação', [['dashboard', 'Painel', 'grid', ['dono', 'recepcao']], ['fila', 'Fila', 'clock', ['dono', 'recepcao', 'barbeiro']], ['caixa', 'Caixa', 'receipt', ['dono', 'recepcao']], ['clientes', 'Clientes', 'users', ['dono', 'recepcao', 'barbeiro']]]],
   ['Gestão', [['barbeiros', 'Equipe', 'scissors', ['dono']], ['comissoes', 'Comissões', 'percent', ['dono', 'barbeiro']], ['catalogo', 'Serviços e produtos', 'box', ['dono', 'recepcao']], ['financeiro', 'Financeiro', 'wallet', ['dono']], ['relatorios', 'Relatórios', 'chart', ['dono']]]],
   ['Sistema', [['config', 'Configurações', 'sliders', ['dono']]]]
 ];
 const allowed = r => NAV.some(g => g[1].some(n => n[0] === r && n[3].includes(SESSION.role)));
-const firstRoute = () => SESSION.role === 'barbeiro' ? 'agenda' : 'dashboard';
+const firstRoute = () => SESSION.role === 'barbeiro' ? 'fila' : 'dashboard';
 
 function loginScreen() {
   $('#root').innerHTML = `<div class="login"><div class="login-art"><div class="pole" aria-hidden="true"></div><span class="wordmark">${esc(DB.cfg.nome)}</span>
-    <div><h1>Tudo da barbearia em um só lugar</h1><p>Agenda, caixa, comissões dos barbeiros, estoque e financeiro. Simples de usar no balcão e completo para quem administra.</p></div><span style="color:#6d6d75;font-size:13px">Versão de demonstração</span></div>
+    <div><h1>Tudo da barbearia em um só lugar</h1><p>Fila de atendimento, caixa, comissões dos barbeiros, estoque e financeiro. Simples de usar no balcão e completo para quem administra.</p></div><span style="color:#6d6d75;font-size:13px">Versão de demonstração</span></div>
     <div class="login-form"><form id="f-login" onsubmit="return false"><h2>Entrar no sistema</h2><div class="demo-note">Demonstração com dados de exemplo. Escolha um perfil para ver o que cada pessoa enxerga.</div>
     ${fld('E-mail', inp('email', 'dono@barbearia.com', 'email', 'autocomplete="off"'))}${fld('Senha', inp('senha', '••••••••', 'password', 'autocomplete="off"'))}
     ${fld('Entrar como', sel('perfil', [['dono', 'Dono (acesso total)'], ['recepcao', 'Recepção'], ...DB.barbers.filter(b => b.ativo).map(b => ['b' + b.id, 'Barbeiro · ' + b.nome])], 'dono'))}
@@ -41,7 +41,6 @@ function render(top) {
   $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === UI.route));
   document.body.classList.remove('nav-open');
   window.scrollTo(0, top ? 0 : y);
-  const w = $('.ag-wrap'); if (w && UI.agDate === TODAY) w.scrollTop = Math.max(0, (NOW_MIN - toMin(DB.cfg.abre)) / 15 * HH - 140);
 }
 function go(r) { UI.route = r; try { history.replaceState(null, '', '#' + r); } catch (e) { } render(true); }
 ACT.go = el => go(el.dataset.r);

@@ -19,7 +19,7 @@ function cliTable() {
   if (!list.length) return empty('Nenhum cliente encontrado.');
   const tagCls = { Sumido: 'warn', Fiel: 'brass', Novo: 'info', Ativo: 'ok' };
   return `<div class="tbl-wrap"><table class="t"><thead><tr><th>Cliente</th><th>Telefone</th><th>Última visita</th><th class="num">Visitas</th><th class="num">Total gasto</th><th>Situação</th></tr></thead><tbody>
-  ${shown.map(({ c, s }) => `<tr data-act="cliOpen" data-id="${c.id}"><td><b>${esc(c.nome)}</b></td><td>${esc(c.tel)}</td><td>${s.ultima ? fmtFull(s.ultima) + ` <span class="muted">· ${s.dias}d</span>` : '—'}</td><td class="num">${s.n}</td><td class="num">${brl(s.total)}</td><td>${badge(s.tag, tagCls[s.tag])}</td></tr>`).join('')}</tbody></table></div>
+  ${shown.map(({ c, s }) => `<tr data-act="cliOpen" data-id="${c.id}"><td><b>${esc(c.nome)}</b></td><td>${esc(c.tel)}</td><td>${s.ultima ? fmtFull(s.ultima) + ` <span class="muted">· ${s.dias}d</span>` : '—'}</td><td class="num">${s.n}</td><td class="num">${brl(s.total)}</td><td>${badge(s.tag, tagCls[s.tag])}${s.brindes ? ' ' + badge('Brinde', 'brass') : ''}</td></tr>`).join('')}</tbody></table></div>
   <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center" class="muted"><span>Mostrando ${shown.length} de ${list.length}</span>${list.length > shown.length ? '<button class="btn btn-sm" data-act="cliMore">Mostrar mais</button>' : ''}</div>`;
 }
 VIEWS.clientes = () => `
@@ -48,10 +48,11 @@ ACT.cliSave = el => {
   save(); closeModal(); toast('Cliente salvo'); render();
 };
 ACT.cliDel = el => confirmBox('Excluir este cliente? O histórico de vendas é mantido como cliente avulso.', () => { const id = +el.dataset.id; DB.clients = DB.clients.filter(c => c.id !== id); save(); toast('Cliente excluído'); render(); }, 'Excluir', true);
+ACT.cliBrinde = el => { const c = client(+el.dataset.id); c.resgates = (c.resgates || 0) + 1; save(); closeModal(); toast('Brinde resgatado: dê um serviço sem custo e registre na venda com desconto'); render(); };
 ACT.cliEdit = el => cliForm(client(+el.dataset.id));
-ACT.cliAgenda = el => { closeModal(); apptForm({ clientId: +el.dataset.id, date: TODAY }); };
+ACT.cliAgenda = el => { closeModal(); queueForm({ clientId: +el.dataset.id }); };
 ACT.cliOpen = el => {
-  const c = client(+el.dataset.id), s = cliStats(c), fut = DB.appts.filter(a => a.clientId === c.id && a.date >= TODAY && !['cancelado', 'faltou', 'concluido'].includes(a.status)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const c = client(+el.dataset.id), s = cliStats(c), fut = [];
   const hist = s.sales.slice().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 10);
   const bc = {}; s.sales.forEach(x => bc[x.barberId] = (bc[x.barberId] || 0) + 1); const fav = Object.entries(bc).sort((a, b) => b[1] - a[1])[0];
   const firstName = c.nome.split(' ')[0];
@@ -61,10 +62,11 @@ ACT.cliOpen = el => {
     title: esc(c.nome), wide: true, body: `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${badge(s.tag, { Sumido: 'warn', Fiel: 'brass', Novo: 'info', Ativo: 'ok' }[s.tag])}<span class="muted">${esc(c.tel || 'sem telefone')}</span>${c.nasc ? `<span class="muted">· ${ic('cake', 14)} ${fmtDate(c.nasc)}</span>` : ''}${isAniv ? badge('Aniversário hoje', 'brass') : ''}</div>
     <div class="stat-row"><div><small>Visitas</small><b>${s.n}</b></div><div><small>Total gasto</small><b>${brl0(s.total)}</b></div><div><small>Ticket médio</small><b>${brl0(s.ticket)}</b></div><div><small>Barbeiro preferido</small><b>${fav ? esc(barber(+fav[0]).nome.split(' ')[0]) : '—'}</b></div></div>
+    <div class="note" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>Cartão fidelidade</b> · ${s.ciclo}/10 atendimentos<div class="progress" style="margin-top:6px"><div style="width:${s.ciclo * 10}%"></div></div></div>${s.brindes ? `<button class="btn btn-sm btn-brass" data-act="cliBrinde" data-id="${c.id}">Resgatar brinde (${s.brindes})</button>` : '<span class="muted">Brinde a cada 10 atendimentos</span>'}</div>
     ${c.obs ? `<div class="note"><b>Preferências:</b> ${esc(c.obs)}</div>` : ''}
     ${fut.length ? `<div><b>Próximos horários</b>${fut.slice(0, 3).map(a => `<div class="list-row" style="padding-left:0;padding-right:0"><span class="time-pill">${fmtDate(a.date)}</span><div class="grow">${a.time} · ${esc(apptSvcNames(a))}<small>${esc(barber(a.barberId).nome)}</small></div>${badge(STATUS[a.status].l)}</div>`).join('')}</div>` : ''}
     <div><b>Histórico de atendimentos</b>${hist.length ? `<div class="tbl-wrap"><table class="t"><tbody>${hist.map(h => `<tr><td>${fmtFull(h.date)}</td><td>${esc(h.items.map(i => i.nome).join(', '))}</td><td>${esc(barber(h.barberId).nome.split(' ')[0])}</td><td class="num">${brl(calcSale(h).total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted" style="margin-top:6px">Nenhuma visita registrada.</p>'}</div>`,
-    foot: `<button class="btn btn-sm spacer" data-act="cliEdit" data-id="${c.id}">${ic('edit', 15)} Editar</button>${c.tel ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msgA)}">${ic('chat', 15)} WhatsApp</a>` : ''}<button class="btn btn-primary btn-sm" data-act="cliAgenda" data-id="${c.id}">Agendar horário</button>`
+    foot: `<button class="btn btn-sm spacer" data-act="cliEdit" data-id="${c.id}">${ic('edit', 15)} Editar</button>${c.tel ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msgA)}">${ic('chat', 15)} WhatsApp</a>` : ''}<button class="btn btn-primary btn-sm" data-act="cliAgenda" data-id="${c.id}">Colocar na fila</button>`
   });
 };
 

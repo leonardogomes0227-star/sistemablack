@@ -91,7 +91,7 @@ VIEWS.relatorios = () => {
   const sv = {}, pr = {};
   sales.forEach(s => s.items.forEach(i => { const t = i.t === 's' ? sv : pr; (t[i.nome] = t[i.nome] || { q: 0, v: 0 }); t[i.nome].q += i.qtd; t[i.nome].v += i.qtd * i.preco; }));
   const top = o => Object.entries(o).sort((a, b) => b[1].v - a[1].v).slice(0, 6);
-  const faltas = appts.filter(a => a.status === 'faltou').length, canc = appts.filter(a => a.status === 'cancelado').length, base = appts.filter(a => !['agendado', 'confirmado', 'andamento'].includes(a.status)).length;
+  const faltas = appts.filter(a => a.status === 'desistiu').length, base = appts.filter(a => ['concluido', 'desistiu'].includes(a.status)).length;
   const firstSeen = c => (M.salesByClient.get(c) || []).reduce((mi, s) => s.date < mi ? s.date : mi, '9999');
   const cids = [...new Set(sales.map(s => s.clientId).filter(Boolean))];
   const novos = cids.filter(c => firstSeen(c) >= from).length;
@@ -103,7 +103,7 @@ VIEWS.relatorios = () => {
   return `<div class="page-h"><div><h1>Relatórios</h1><p>${label} · ${sales.length} vendas</p></div><div class="acts"><button class="btn" data-act="relExport">${ic('download', 16)} Exportar vendas (CSV)</button></div></div>
   <div class="chips" style="margin-bottom:16px">${[['mes', 'Este mês'], ['ant', 'Mês passado'], ['30', '30 dias'], ['90', '90 dias']].map(([k, l]) => `<button class="chip ${r === k ? 'on' : ''}" data-act="relRange" data-k="${k}">${l}</button>`).join('')}</div>
   <div class="grid g4 keep2"><div class="card kpi"><small>Faturamento</small><b>${brl0(total)}</b></div><div class="card kpi"><small>Clientes atendidos</small><b>${cids.length}</b><div class="sub">${novos} novo(s) no período</div></div>
-    <div class="card kpi"><small>Taxa de faltas</small><b>${base ? (faltas / base * 100).toFixed(1) : 0}%</b><div class="sub">${faltas} falta(s) · ${canc} cancelamento(s)</div></div><div class="card kpi"><small>Retorno de clientes</small><b>${cids.length ? ((cids.length - novos) / cids.length * 100).toFixed(0) : 0}%</b><div class="sub">já eram clientes antes</div></div></div>
+    <div class="card kpi"><small>Desistências na fila</small><b>${base ? (faltas / base * 100).toFixed(1) : 0}%</b><div class="sub">${faltas} cliente(s) saíram sem atendimento</div></div><div class="card kpi"><small>Retorno de clientes</small><b>${cids.length ? ((cids.length - novos) / cids.length * 100).toFixed(0) : 0}%</b><div class="sub">já eram clientes antes</div></div></div>
   <div class="grid g2 mt"><div class="card"><div class="card-h"><h3>Serviços mais vendidos</h3></div><div class="card-b">${sT.length ? sT.map(([n, o]) => hbar(esc(n), o.v, sT[0][1].v, `${brl0(o.v)} <span class="muted" style="font-weight:400">· ${o.q}×</span>`)).join('') : empty('Sem dados')}</div></div>
     <div class="card"><div class="card-h"><h3>Produtos mais vendidos</h3></div><div class="card-b">${pT.length ? pT.map(([n, o]) => hbar(esc(n), o.v, pT[0][1].v, `${brl0(o.v)} <span class="muted" style="font-weight:400">· ${o.q} un.</span>`, 'var(--brass)')).join('') : empty('Sem dados')}</div></div></div>
   <div class="card mt"><div class="card-h"><h3>Horários de maior movimento</h3><span class="muted">Quanto mais escuro, mais atendimentos</span></div><div class="card-b" style="overflow-x:auto"><div class="heat" style="grid-template-columns:70px repeat(${hrs.length},minmax(38px,1fr));min-width:560px"><span></span>${hrs.map(h => `<span class="heat-h">${h}h</span>`).join('')}
@@ -126,18 +126,18 @@ VIEWS.config = () => {
   <div class="card"><div class="card-h"><h3>Funcionamento</h3></div><div class="card-b form-grid">${fld('Abre às', inp('abre', c.abre, 'time'))}${fld('Fecha às', inp('fecha', c.fecha, 'time'))}
     <div class="full"><span class="muted" style="font-size:13px;font-weight:500">Dias de funcionamento</span><div class="chips" style="margin-top:6px">${DIAS.map((d, i) => `<label class="check"><input type="checkbox" name="dia" value="${i}" ${c.dias.includes(i) ? 'checked' : ''}> ${d.slice(0, 3)}</label>`).join('')}</div></div></div></div>
   <div class="card"><div class="card-h"><h3>Taxas da maquininha</h3></div><div class="card-b form-grid">${fld('Pix (%)', inp('taxaPix', c.taxaPix, 'number', 'min="0" step="0.1"'))}${fld('Débito (%)', inp('taxaDeb', c.taxaDeb, 'number', 'min="0" step="0.1"'))}${fld('Crédito (%)', inp('taxaCred', c.taxaCred, 'number', 'min="0" step="0.1"'))}<div class="full note">As taxas entram no cálculo do lucro líquido do financeiro.</div></div></div>
-  <div class="card"><div class="card-h"><h3>Mensagens de WhatsApp</h3></div><div class="card-b form-grid">${fld('Confirmação de horário', `<textarea name="msgConfirma" rows="3">${esc(c.msgConfirma)}</textarea>`, 'full')}${fld('Aniversário', `<textarea name="msgAniv" rows="2">${esc(c.msgAniv)}</textarea>`, 'full')}${fld('Cliente sumido', `<textarea name="msgSumido" rows="2">${esc(c.msgSumido)}</textarea>`, 'full')}<div class="full note">Variáveis: {nome} {data} {hora} {servico} {barbeiro} {barbearia}</div></div></div>
+  <div class="card"><div class="card-h"><h3>Mensagens de WhatsApp</h3></div><div class="card-b form-grid">${fld('Aviso de chamada (sua vez)', `<textarea name="msgVez" rows="2">${esc(c.msgVez)}</textarea>`, 'full')}${fld('Aniversário', `<textarea name="msgAniv" rows="2">${esc(c.msgAniv)}</textarea>`, 'full')}${fld('Cliente sumido', `<textarea name="msgSumido" rows="2">${esc(c.msgSumido)}</textarea>`, 'full')}<div class="full note">Variáveis: {nome} {barbeiro} {barbearia}</div></div></div>
   </form>
   <div class="card mt"><div class="card-h"><h3>Acessos e permissões</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Perfil</th><th>Pode ver</th><th>Não vê</th></tr></thead><tbody>
     <tr><td><b>Dono</b></td><td>Tudo: painel, caixa, financeiro, comissões de todos, equipe e configurações</td><td class="muted">—</td></tr>
-    <tr><td><b>Recepção</b></td><td>Painel, agenda, caixa, clientes e catálogo</td><td class="muted">Financeiro, comissões, equipe, configurações</td></tr>
-    <tr><td><b>Barbeiro</b></td><td>Própria agenda, clientes e o próprio extrato de comissão</td><td class="muted">Caixa, financeiro e dados dos colegas</td></tr></tbody></table></div></div>
+    <tr><td><b>Recepção</b></td><td>Painel, fila de atendimento, caixa (com gaveta), clientes e catálogo</td><td class="muted">Financeiro, comissões, equipe, configurações</td></tr>
+    <tr><td><b>Barbeiro</b></td><td>Fila e cadeira, clientes e o próprio extrato de comissão</td><td class="muted">Caixa, financeiro e dados dos colegas</td></tr></tbody></table></div></div>
   <div class="acts mt" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" data-act="cfgSave">Salvar configurações</button><button class="btn" data-act="backup">${ic('download', 16)} Baixar backup (JSON)</button><button class="btn btn-danger" data-act="resetDemo">Restaurar dados de exemplo</button></div>`;
 };
 ACT.cfgSave = () => {
   const f = $('#f-cfg'), d = formData(f), c = DB.cfg;
   if (toMin(d.fecha) <= toMin(d.abre)) return toast('O horário de fechamento deve ser depois da abertura', 'bad');
-  Object.assign(c, { nome: d.nome.trim() || c.nome, endereco: d.endereco, tel: d.tel, metaMes: num2(d.metaMes), abre: d.abre, fecha: d.fecha, dias: $$('[name=dia]:checked', f).map(i => +i.value), taxaPix: num2(d.taxaPix), taxaDeb: num2(d.taxaDeb), taxaCred: num2(d.taxaCred), msgConfirma: d.msgConfirma, msgAniv: d.msgAniv, msgSumido: d.msgSumido });
+  Object.assign(c, { nome: d.nome.trim() || c.nome, endereco: d.endereco, tel: d.tel, metaMes: num2(d.metaMes), abre: d.abre, fecha: d.fecha, dias: $$('[name=dia]:checked', f).map(i => +i.value), taxaPix: num2(d.taxaPix), taxaDeb: num2(d.taxaDeb), taxaCred: num2(d.taxaCred), msgVez: d.msgVez, msgAniv: d.msgAniv, msgSumido: d.msgSumido });
   save(); toast('Configurações salvas'); render();
 };
 ACT.backup = () => download('backup-barbearia.json', JSON.stringify(DB, null, 1), 'application/json');

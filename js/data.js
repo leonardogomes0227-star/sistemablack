@@ -12,12 +12,11 @@ function seedData() {
     cfg: {
       nome: 'Barbearia Modelo', endereco: 'Rua Exemplo, 123 · Centro', tel: '(11) 99999-0000', abre: '09:00', fecha: '20:00',
       dias: [1, 2, 3, 4, 5, 6], taxaPix: 0, taxaDeb: 1.6, taxaCred: 3.9, metaMes: 45000,
-      msgConfirma: 'Olá {nome}! Seu horário na {barbearia} está agendado para {data} às {hora} ({servico}) com {barbeiro}. Responda SIM para confirmar.',
-      msgLembrete: 'Oi {nome}, passando para lembrar do seu horário hoje às {hora} na {barbearia}. Até já!',
+      msgVez: 'Fala {nome}, é a sua vez na {barbearia}! O {barbeiro} já vai te atender.',
       msgAniv: 'Parabéns, {nome}! A equipe da {barbearia} deseja um ótimo dia. Passe aqui essa semana e ganhe 15% de desconto no seu corte.',
       msgSumido: 'Fala {nome}, faz um tempo que não te vemos por aqui. Bora marcar um horário? Responda essa mensagem que a gente encaixa.'
     },
-    barbers: [], services: [], products: [], clients: [], appts: [], sales: [], expenses: [], vales: [], payouts: {}
+    barbers: [], services: [], products: [], clients: [], appts: [], sales: [], expenses: [], vales: [], payouts: {}, caixa: {}
   };
   const id = () => ++D.seq;
 
@@ -61,11 +60,10 @@ function seedData() {
   const visits = [];
   for (const c of D.clients) {
     let d = addDays(TODAY, -120 + rint(0, c._freq));
-    while (d <= addDays(TODAY, 10)) {
+    while (d <= TODAY) {
       if (c._churn && d > c._churn) break;
       let day = d; if (pd(day).getDay() === 0) day = addDays(day, 1);
-      const prob = day <= TODAY ? 1 : day === addDays(TODAY, 1) ? .85 : day <= addDays(TODAY, 3) ? .6 : .35;
-      if (R() < prob) visits.push({ c, day });
+      if (day <= TODAY) visits.push({ c, day });
       d = addDays(d, c._freq + rint(-4, 4));
     }
   }
@@ -86,9 +84,8 @@ function seedData() {
     if (!placed) continue;
     mark(placed.b.id, day, placed.st, placed.en);
     let status;
-    if (day < TODAY) status = wpick([['concluido', 93], ['faltou', 4], ['cancelado', 3]]);
-    else if (day === TODAY) status = placed.en <= NOW_MIN ? 'concluido' : placed.st <= NOW_MIN ? 'andamento' : (R() < .6 ? 'confirmado' : 'agendado');
-    else status = R() < .55 ? 'confirmado' : 'agendado';
+    if (day < TODAY) status = wpick([['concluido', 94], ['desistiu', 6]]);
+    else { if (placed.st > NOW_MIN) continue; status = placed.en <= NOW_MIN ? 'concluido' : 'andamento'; }
     const a = { id: id(), clientId: c.id, barberId: placed.b.id, svc, date: day, time: toTime(placed.st), dur, status, obs: '', saleId: null };
     D.appts.push(a);
     if (status === 'concluido') {
@@ -99,6 +96,16 @@ function seedData() {
       const sale = { id: id(), date: day, time: a.time, clientId: c.id, barberId: a.barberId, items, desc: R() < .05 ? Math.round(sub * .1) : 0, tip: wpick([[0, 62], [5, 14], [10, 20], [20, 4]]), pag: wpick([['pix', 42], ['credito', 24], ['debito', 20], ['dinheiro', 14]]), apptId: a.id };
       a.saleId = sale.id; D.sales.push(sale);
     }
+  }
+
+  // fila de espera de hoje (clientes que chegaram e ainda aguardam)
+  if (D.cfg.dias.includes(pd(TODAY).getDay()) && NOW_MIN > open + 30 && NOW_MIN < close - 30) {
+    const taken = new Set(D.appts.filter(a => a.date === TODAY).map(a => a.clientId));
+    const pool = D.clients.filter(c => !taken.has(c.id) && c._churn === null);
+    [[5, 0], [11, 1], [17, 0]].forEach(([ago, pref], i) => {
+      const c = pool[i * 13 + 4], svc = [c._pref];
+      D.appts.push({ id: id(), clientId: c.id, barberId: pref ? c._fav : null, svc, date: TODAY, time: toTime(Math.max(open, NOW_MIN - ago - i * 4)), dur: S.find(s => s.id === svc[0]).dur, status: 'aguardando', obs: '', saleId: null });
+    });
   }
 
   // despesas dos últimos 4 meses
@@ -123,6 +130,14 @@ function seedData() {
   // comissões de meses anteriores já pagas (mês passado fica em aberto)
   DB = D; reindex();
   for (const k of [-3, -2]) for (const b of D.barbers) { const m = addMonths(m0, k); const st = stmt(b.id, m); D.payouts[b.id + '_' + m] = { date: `${addMonths(m, 1)}-05`, valor: st.net }; }
+  // gaveta do caixa: últimos dias fechados, hoje aberto
+  for (let k = 7; k >= 0; k--) {
+    const d = addDays(TODAY, -k); if (!D.cfg.dias.includes(pd(d).getDay())) continue;
+    const r = { abertura: 100, movs: k % 3 === 1 ? [{ id: id(), tipo: 'sangria', valor: 200, desc: 'Retirada do dono', hora: '18:30' }] : [], fechamento: null };
+    if (k > 0) { const g = (() => { const sales = (M.salesByDate.get(d) || []); const din = sum(sales.filter(s => s.pag === 'dinheiro'), s => calcSale(s).total + (s.tip || 0)); return 100 + din - sum(r.movs, m => m.valor); })(); r.fechamento = { contado: g + [0, 0, -5, 0, 10, 0, -10, 0][k], hora: '20:05' }; }
+    D.caixa[d] = r;
+  }
+  for (const c of D.clients) { const n = (M.salesByClient.get(c.id) || []).length; if (n >= 10) c.resgates = Math.floor(n / 10) - (R() < .5 ? 1 : 0); }
   for (const c of D.clients) { delete c._fav; delete c._pref; delete c._freq; delete c._churn; }
   return D;
 }

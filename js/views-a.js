@@ -1,5 +1,5 @@
 'use strict';
-const UI = { route: 'dashboard', agDate: TODAY, agBarbers: null, dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, relRange: 'mes', finFilter: 'todas' };
+const UI = { route: 'dashboard', dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, relRange: 'mes', finFilter: 'todas' };
 const ACT = {}; const CHG = {}; const VIEWS = {};
 let SESSION = null;
 const isDono = () => SESSION.role === 'dono';
@@ -11,7 +11,8 @@ VIEWS.dashboard = () => {
   const mtd = d => sum(DB.sales.filter(s => s.date >= d.slice(0, 7) + '-01' && s.date <= d), s => calcSale(s).total);
   const hoje = sum(salesOn(TODAY), s => calcSale(s).total), semPas = sum(salesOn(addDays(TODAY, -7)), s => calcSale(s).total);
   const mes = mtd(TODAY), mesPas = mtd(`${pm}-${pad(Math.min(day, 28))}`);
-  const ap = apptsOn(TODAY).filter(a => a.status !== 'cancelado');
+  const ap = apptsOn(TODAY).filter(a => a.status !== 'desistiu');
+  const waitN = ap.filter(a => a.status === 'aguardando').length, liveN = ap.filter(a => a.status === 'andamento').length;
   const feitos = ap.filter(a => a.status === 'concluido').length;
   const ms = monthStats(m);
   const openDays = d => { let n = 0; const [y, mo] = d.split('-').map(Number); const last = new Date(y, mo, 0).getDate(); for (let i = 1; i <= last; i++) if (DB.cfg.dias.includes(new Date(y, mo - 1, i).getDay())) n++; return n; };
@@ -21,7 +22,6 @@ VIEWS.dashboard = () => {
 
   const days = []; for (let i = UI.dashRange - 1; i >= 0; i--) { const d = addDays(TODAY, -i); const v = sum(salesOn(d), s => calcSale(s).total); days.push({ v, l: fmtDate(d), hl: d === TODAY, t: `${fmtDate(d)} · ${brl(v)}` }); }
 
-  const prox = apptsOn(TODAY).filter(a => ['agendado', 'confirmado', 'andamento'].includes(a.status)).sort((a, b) => a.time.localeCompare(b.time)).slice(0, 7);
   const rank = DB.barbers.filter(b => b.ativo).map(b => ({ b, st: stmt(b.id, m) })).sort((a, b) => b.st.fat - a.st.fat);
   const maxFat = Math.max(...rank.map(r => r.st.fat), 1);
 
@@ -43,19 +43,19 @@ VIEWS.dashboard = () => {
   return `
   <section class="hero"><span class="pole" aria-hidden="true"></span>
     <div><span class="hero-eyebrow">${cap(fmtLong(TODAY))}</span><h1>${saud}</h1>
-      <div class="hero-acts"><button class="btn btn-brass" data-act="newAppt">${ic('plus', 16)} Novo agendamento</button><button class="btn btn-ghost-d" data-act="newSale">${ic('receipt', 16)} Nova venda</button></div></div>
+      <div class="hero-acts"><button class="btn btn-brass" data-act="newQueue">${ic('plus', 16)} Colocar na fila</button><button class="btn btn-ghost-d" data-act="newSale">${ic('receipt', 16)} Nova venda</button></div></div>
     <div class="hero-n"><small>Faturamento hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span>vs. mesmo dia da semana passada</span></div></div>
   </section>
   <div class="grid g3 mt">
-    <div class="card kpi"><small>Atendimentos hoje</small><b>${feitos} <span class="muted" style="font-size:18px;font-weight:500">/ ${ap.length}</span></b><div class="sub">${ap.length - feitos} restante(s) na agenda</div></div>
+    <div class="card kpi"><small>Atendimentos hoje</small><b>${feitos}</b><div class="sub">${waitN} na fila · ${liveN} em atendimento</div></div></div>
     <div class="card kpi"><small>Faturamento do mês</small><b>${brl0(mes)}</b><div class="kpi-line">${delta(mes, mesPas)}<span class="sub">vs. ${MESES[+pm.slice(5) - 1].toLowerCase()} até hoje</span></div></div>
     <div class="card kpi"><small>Ticket médio do mês</small><b>${brl(ms.ticket)}</b><div class="sub">${ms.n} atendimentos pagos</div></div>
   </div>
   <div class="grid g-main mt">
     <div class="card"><div class="card-h"><h3>Faturamento por dia</h3><div class="chips">${[15, 30, 60].map(n => `<button class="chip ${UI.dashRange === n ? 'on' : ''}" data-act="dashRange" data-n="${n}">${n} dias</button>`).join('')}</div></div>
       <div class="card-b">${bars(days, { every: Math.ceil(UI.dashRange / 6) })}</div></div>
-    <div class="card"><div class="card-h"><h3>Próximos na agenda</h3><button class="btn btn-sm" data-act="go" data-r="agenda">Ver agenda</button></div>
-      ${prox.length ? prox.map(a => { const b = barber(a.barberId), c = client(a.clientId); return `<div class="list-row" data-act="appt" data-id="${a.id}"><span class="time-pill">${a.time}</span><div class="grow"><b>${esc(c?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))}</small></div>${avatar(b, 26)}</div>`; }).join('') : empty('Nada mais agendado para hoje.')}</div>
+    <div class="card"><div class="card-h"><h3>Fila agora</h3><button class="btn btn-sm" data-act="go" data-r="fila">Abrir fila</button></div>
+      ${(() => { const l = apptsOn(TODAY).filter(a => ['aguardando', 'andamento'].includes(a.status)).sort((a, b) => (a.status === b.status ? a.time.localeCompare(b.time) : a.status === 'andamento' ? -1 : 1)).slice(0, 7); return l.length ? l.map(a => { const b = a.barberId ? barber(a.barberId) : null, c = client(a.clientId); return `<div class="list-row" data-act="qItem" data-id="${a.id}"><span class="time-pill">${a.time}</span><div class="grow"><b>${esc(c?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))}</small></div>${a.status === 'andamento' ? badge('Atendendo', 'brass') : badge('Aguardando', 'info')}${b ? avatar(b, 26) : ''}</div>`; }).join('') : empty('Ninguém na fila agora.'); })()}</div>
   </div>
   <div class="grid g2 mt">
     <div class="card"><div class="card-h"><h3>Desempenho da equipe · ${mLabel(m)}</h3></div><div class="card-b">
@@ -69,106 +69,85 @@ VIEWS.dashboard = () => {
 ACT.dashRange = el => { UI.dashRange = +el.dataset.n; render(); };
 ACT.goAlert = el => { const [r, f] = el.dataset.r.split(':'); if (f) { UI.cliFilter = f; UI.cliLimit = 50; } go(r); };
 
-/* ================= AGENDA ================= */
-const HH = 22; // px por 15 min
-VIEWS.agenda = () => {
-  const open = toMin(DB.cfg.abre), close = toMin(DB.cfg.fecha), rows = (close - open) / 15, hh = HH * 4;
-  const all = visibleBarbers();
-  if (!UI.agBarbers) UI.agBarbers = new Set(all.map(b => b.id));
-  const cols = all.filter(b => UI.agBarbers.has(b.id));
-  const d = UI.agDate, openDay = DB.cfg.dias.includes(pd(d).getDay());
-  const appts = apptsOn(d);
-  const counts = { total: appts.filter(a => !['cancelado', 'faltou'].includes(a.status)).length };
-  const nowTop = d === TODAY && NOW_MIN >= open && NOW_MIN <= close ? (NOW_MIN - open) / 15 * HH : null;
+/* ================= FILA DE ATENDIMENTO ================= */
+const queueToday = () => {
+  const t = apptsOn(TODAY);
+  return { wait: t.filter(a => a.status === 'aguardando').sort((a, b) => a.time.localeCompare(b.time)), live: t.filter(a => a.status === 'andamento'), done: t.filter(a => a.status === 'concluido').sort((a, b) => b.time.localeCompare(a.time)) };
+};
+const chairCard = (b, q) => {
+  const a = q.live.find(x => x.barberId === b.id);
+  if (!a) return `<div class="chair">${'<div class="who-cell">' + avatar(b, 38) + '<div><b>' + esc(b.nome) + '</b><br><span class="badge ok">Livre</span></div></div>'}<p class="muted" style="font-size:13px">Cadeira disponível.</p><button class="btn btn-sm btn-brass" data-act="callNext" data-id="${b.id}">Chamar próximo</button></div>`;
+  const el = Math.max(0, nowMin() - toMin(a.time)), c = client(a.clientId);
+  return `<div class="chair busy"><div class="who-cell">${avatar(b, 38)}<div><b>${esc(b.nome)}</b><br><span class="badge brass">Atendendo</span></div></div>
+    <div><b>${esc(c?.nome || 'Cliente avulso')}</b><div class="muted" style="font-size:13px">${esc(apptSvcNames(a))}</div></div>
+    <div><div class="hbar-top"><span class="muted">${el} min em atendimento</span><span class="muted">previsto ${a.dur} min</span></div><div class="progress"><div style="width:${Math.min(100, el / a.dur * 100)}%"></div></div></div>
+    <button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Finalizar e cobrar</button></div>`;
+};
+VIEWS.fila = () => {
+  const q = queueToday(), all = visibleBarbers(), active = DB.barbers.filter(b => b.ativo);
+  const free = active.filter(b => !q.live.some(a => a.barberId === b.id)).length;
+  const esp = q.wait.length ? Math.ceil(sum(q.wait, a => a.dur) / Math.max(1, active.length)) : 0;
   return `
-  <div class="page-h"><div><h1>Agenda</h1><p>${cap(fmtLong(d))} · ${counts.total} atendimento(s)${openDay ? '' : ' · <b>fechado</b>'}</p></div>
-    <div class="acts"><button class="btn btn-primary" data-act="newAppt">${ic('plus', 16)} Novo agendamento</button></div></div>
-  <div class="toolbar">
-    <div class="datenav"><button class="icon-btn" data-act="agNav" data-n="-1" aria-label="Dia anterior">${ic('left')}</button><span class="datenav-l">${d === TODAY ? 'Hoje' : fmtDate(d, { weekday: 'short', day: '2-digit', month: 'short' })}</span><button class="icon-btn" data-act="agNav" data-n="1" aria-label="Próximo dia">${ic('right')}</button></div>
-    <button class="btn" data-act="agToday">Hoje</button>
-    <input type="date" value="${d}" data-change="agDate" style="width:auto" aria-label="Ir para a data">
-    ${SESSION.role !== 'barbeiro' ? `<div class="chips" style="margin-left:auto">${all.map(b => `<button class="chip ${UI.agBarbers.has(b.id) ? 'on' : ''}" data-act="agBarber" data-id="${b.id}">${esc(b.nome.split(' ')[0])}</button>`).join('')}</div>` : ''}
+  <div class="page-h"><div><h1>Fila de atendimento</h1><p>Ordem de chegada, sem hora marcada · ${cap(fmtLong(TODAY))}</p></div>
+    <div class="acts"><button class="btn btn-primary" data-act="newQueue">${ic('plus', 16)} Colocar na fila</button></div></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Na fila</small><b>${q.wait.length}</b><div class="sub">cliente(s) aguardando</div></div>
+    <div class="card kpi"><small>Espera estimada</small><b>${esp} <span class="muted" style="font-size:18px;font-weight:500">min</span></b><div class="sub">para quem chegar agora</div></div>
+    <div class="card kpi"><small>Cadeiras</small><b>${active.length - free} <span class="muted" style="font-size:18px;font-weight:500">/ ${active.length}</span></b><div class="sub">${free} livre(s)</div></div>
+    <div class="card kpi"><small>Atendidos hoje</small><b>${q.done.length}</b><div class="sub">${brl0(sum(q.done, apptValue))} em serviços</div></div></div>
+  <div class="grid g-main mt">
+    <div class="card"><div class="card-h"><h3>Cadeiras</h3></div><div class="card-b"><div class="chairs">${all.map(b => chairCard(b, q)).join('')}</div></div></div>
+    <div class="card"><div class="card-h"><h3>Fila de espera</h3><span class="muted">${q.wait.length} aguardando</span></div>
+      ${q.wait.length ? q.wait.map((a, i) => { const b = a.barberId && barber(a.barberId), c = client(a.clientId); return `<div class="list-row" data-act="qItem" data-id="${a.id}"><span class="pos">${i + 1}</span><div class="grow"><b>${esc(c?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))} · ${b ? 'prefere ' + esc(b.nome.split(' ')[0]) : 'qualquer barbeiro'}</small></div><span class="muted nowrap">${Math.max(0, nowMin() - toMin(a.time))} min</span></div>`; }).join('') : empty('Ninguém aguardando. Clique em "Colocar na fila" quando um cliente chegar.')}</div>
   </div>
-  <div class="card"><div class="ag-wrap"><div class="ag" style="grid-template-columns:56px repeat(${cols.length},minmax(190px,1fr));--hh:${hh}px">
-    <div class="ag-corner"></div>
-    ${cols.map(b => { const n = appts.filter(a => a.barberId === b.id && !['cancelado', 'faltou'].includes(a.status)); return `<div class="ag-head">${avatar(b, 30)}<div><b>${esc(b.nome)}</b><small>${n.length} atend. · ${brl0(sum(n, apptValue))}</small></div></div>`; }).join('')}
-    <div class="ag-times" style="height:${rows * HH}px">${Array.from({ length: Math.floor(rows / 4) + 1 }, (_, i) => `<div class="ag-t" style="position:absolute;top:${Math.max(i * hh - 8, 3)}px;right:0;left:0">${toTime(open + i * 60)}</div>`).join('')}</div>
-    ${cols.map(b => `<div class="ag-col ${openDay ? '' : 'off'}" data-act="slot" data-b="${b.id}" style="height:${rows * HH}px;--c:${b.cor}">
-      ${appts.filter(a => a.barberId === b.id).map(a => { const top = (toMin(a.time) - open) / 15 * HH, h = Math.max(a.dur / 15 * HH - 2, 24), c = client(a.clientId);
-    return `<div class="appt ${STATUS[a.status].c}" data-act="appt" data-id="${a.id}" style="top:${top}px;height:${h}px;--c:${b.cor}" title="${esc(STATUS[a.status].l)}"><b>${a.time} · ${esc(c?.nome || 'Cliente avulso')}</b><span>${esc(apptSvcNames(a))}</span></div>`; }).join('')}
-      ${nowTop !== null ? `<div class="now-line" style="top:${nowTop}px"></div>` : ''}</div>`).join('')}
-  </div></div></div>
-  <div class="legend mt">${['agendado', 'confirmado', 'andamento', 'concluido', 'faltou'].map(k => `<span><i style="background:${{ agendado: '#fff', confirmado: '#fff', andamento: 'var(--brass-bg)', concluido: '#eef6f1', faltou: '#f3f1ed' }[k]}"></i>${STATUS[k].l}</span>`).join('')}<span>Ponto verde = cliente confirmou</span><span>Clique em um horário vazio para agendar</span></div>`;
+  <div class="card mt"><div class="card-h"><h3>Atendidos hoje</h3></div>${q.done.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Chegada</th><th>Cliente</th><th>Serviços</th><th>Barbeiro</th><th class="num">Valor</th></tr></thead><tbody>
+    ${q.done.map(a => `<tr data-act="sale" data-id="${a.saleId}"><td>${a.time}</td><td>${esc(client(a.clientId)?.nome || 'Cliente avulso')}</td><td class="muted">${esc(apptSvcNames(a))}</td><td>${esc(barber(a.barberId).nome.split(' ')[0])}</td><td class="num"><b>${brl(apptValue(a))}</b></td></tr>`).join('')}</tbody></table></div>` : empty('Nenhum atendimento concluído ainda.')}</div>`;
 };
-ACT.agNav = el => { UI.agDate = addDays(UI.agDate, +el.dataset.n); render(); };
-ACT.agToday = () => { UI.agDate = TODAY; render(); };
-CHG.agDate = el => { if (el.value) { UI.agDate = el.value; render(); } };
-ACT.agBarber = el => { const id = +el.dataset.id; UI.agBarbers.has(id) ? UI.agBarbers.delete(id) : UI.agBarbers.add(id); if (!UI.agBarbers.size) UI.agBarbers.add(id); render(); };
-ACT.slot = (el, ev) => {
-  const r = el.getBoundingClientRect(); const mins = toMin(DB.cfg.abre) + Math.floor((ev.clientY - r.top) / HH) * 15;
-  apptForm({ barberId: +el.dataset.b, date: UI.agDate, time: toTime(Math.min(mins, toMin(DB.cfg.fecha) - 15)) });
-};
-ACT.newAppt = () => apptForm({ date: UI.route === 'agenda' ? UI.agDate : TODAY });
-
-function apptForm(a = {}) {
-  const edit = !!a.id; const bs = visibleBarbers();
-  const times = []; for (let t = toMin(DB.cfg.abre); t < toMin(DB.cfg.fecha); t += 15) times.push([toTime(t), toTime(t)]);
-  const cl = a.clientId ? client(a.clientId) : null, svcSel = new Set(a.svc || []);
+ACT.newQueue = () => queueForm({});
+function queueForm(a) {
+  const edit = !!a.id, bs = DB.barbers.filter(b => b.ativo), cl = a.clientId ? client(a.clientId) : null, svcSel = new Set(a.svc || []);
   openModal({
-    title: edit ? 'Editar agendamento' : 'Novo agendamento', wide: true,
-    body: `<form id="f-appt" class="form-grid" onsubmit="return false">
+    title: edit ? 'Editar item da fila' : 'Colocar na fila', wide: true,
+    body: `<form id="f-q" class="form-grid" onsubmit="return false">
       ${fld('Cliente', clientPicker('cliente', cl ? cl.nome + ' · ' + cl.tel : ''), 'full')}
       ${fld('Telefone (só para cliente novo)', inp('tel', '', 'tel', 'placeholder="(11) 90000-0000"'))}
-      ${fld('Barbeiro', sel('barberId', bs.map(b => [b.id, b.nome]), a.barberId || bs[0].id))}
-      ${fld('Data', inp('date', a.date, 'date', 'required'))}${fld('Horário', sel('time', times, a.time || '09:00'))}
-      <div class="full"><span class="muted" style="font-size:13px;font-weight:500">Serviços</span><div class="svc-pick" style="margin-top:6px">${DB.services.filter(s => s.ativo || svcSel.has(s.id)).map(s => `<label class="svc-opt"><input type="checkbox" name="svc" value="${s.id}" data-change="apptCalc" ${svcSel.has(s.id) ? 'checked' : ''}><span class="grow">${esc(s.nome)}<small>${s.dur} min</small></span><b>${brl0(s.preco)}</b></label>`).join('')}</div></div>
-      ${fld('Duração (min)', inp('dur', a.dur || 40, 'number', 'min="15" step="5" required'))}
-      <div class="field"><span>Valor previsto</span><div id="ap-total" style="height:38px;display:flex;align-items:center;font-weight:600">${brl(0)}</div></div>
-      ${fld('Observações', `<textarea name="obs" rows="2" placeholder="Ex.: prefere máquina 1, vai com o filho…">${esc(a.obs || '')}</textarea>`, 'full')}
-      <div class="full" id="ap-err" style="color:var(--bad);font-weight:500"></div></form>`,
-    foot: `${edit ? `<button class="btn btn-danger spacer" data-act="apptDel" data-id="${a.id}">Excluir</button>` : ''}<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="apptSave" data-id="${a.id || ''}">Salvar agendamento</button>`
+      ${fld('Barbeiro de preferência', sel('barberId', [['', 'Qualquer um'], ...bs.map(b => [b.id, b.nome])], a.barberId || ''))}
+      <div class="full"><span class="muted" style="font-size:13px;font-weight:500">Serviços</span><div class="svc-pick" style="margin-top:6px">${DB.services.filter(s => s.ativo || svcSel.has(s.id)).map(s => `<label class="svc-opt"><input type="checkbox" name="svc" value="${s.id}" ${svcSel.has(s.id) ? 'checked' : ''}><span class="grow">${esc(s.nome)}<small>${s.dur} min</small></span><b>${brl0(s.preco)}</b></label>`).join('')}</div></div>
+      ${fld('Observações', `<textarea name="obs" rows="2" placeholder="Ex.: vai com o filho, tem pressa…">${esc(a.obs || '')}</textarea>`, 'full')}
+      <div class="full" id="q-err" style="color:var(--bad);font-weight:500"></div></form>`,
+    foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="queueSave" data-id="${a.id || ''}">${edit ? 'Salvar' : 'Entrar na fila'}</button>`
   });
-  CHG.apptCalc(); if (a.dur) $('#f-appt [name=dur]').value = a.dur;
 }
-CHG.apptCalc = () => {
-  const f = $('#f-appt'); if (!f) return; const ids = $$('[name=svc]:checked', f).map(i => +i.value);
-  $('#ap-total').textContent = brl(sum(ids, id => service(id).preco));
-  if (ids.length) f.dur.value = sum(ids, id => service(id).dur);
+ACT.queueSave = el => {
+  const f = $('#f-q'), d = formData(f), svc = $$('[name=svc]:checked', f).map(i => +i.value), id = +el.dataset.id || null;
+  if (!d.cliente.trim()) return $('#q-err').textContent = 'Informe o cliente.';
+  if (!svc.length) return $('#q-err').textContent = 'Escolha pelo menos um serviço.';
+  const v = { clientId: resolveClient(d.cliente, d.tel), barberId: d.barberId ? +d.barberId : null, svc, dur: sum(svc, sid => service(sid).dur), obs: d.obs };
+  if (id) Object.assign(M.appts.get(id), v); else DB.appts.push({ id: nextId(), date: TODAY, time: toTime(nowMin()), status: 'aguardando', saleId: null, ...v });
+  save(); closeModal(); toast(id ? 'Fila atualizada' : 'Cliente na fila'); render();
 };
-ACT.apptSave = el => {
-  const f = $('#f-appt'), d = formData(f), svc = $$('[name=svc]:checked', f).map(i => +i.value), err = $('#ap-err'), id = +el.dataset.id || null;
-  if (!d.cliente.trim()) return err.textContent = 'Informe o cliente.';
-  if (!svc.length) return err.textContent = 'Escolha pelo menos um serviço.';
-  const bid = +d.barberId, st = toMin(d.time), dur = +d.dur;
-  if (st + dur > toMin(DB.cfg.fecha)) return err.textContent = 'O atendimento passa do horário de fechamento.';
-  const c = hasConflict(bid, d.date, st, dur, id); if (c) return err.textContent = `Conflito: ${barber(bid).nome.split(' ')[0]} já tem ${client(c.clientId)?.nome || 'um atendimento'} às ${c.time}.`;
-  const cid = resolveClient(d.cliente, d.tel);
-  if (id) Object.assign(M.appts.get(id), { clientId: cid, barberId: bid, svc, date: d.date, time: d.time, dur, obs: d.obs });
-  else DB.appts.push({ id: nextId(), clientId: cid, barberId: bid, svc, date: d.date, time: d.time, dur, status: 'agendado', obs: d.obs, saleId: null });
-  save(); closeModal(); toast(id ? 'Agendamento atualizado' : 'Horário agendado'); render();
+const callTo = (a, bid) => {
+  if (apptsOn(TODAY).some(x => x.status === 'andamento' && x.barberId === bid)) return toast(barber(bid).nome.split(' ')[0] + ' está ocupado com outro cliente', 'bad');
+  a.barberId = bid; a.status = 'andamento'; save(); closeModal(); toast(`${client(a.clientId)?.nome.split(' ')[0] || 'Cliente'} chamado para a cadeira de ${barber(bid).nome.split(' ')[0]}`); render();
 };
-ACT.apptDel = el => confirmBox('Excluir este agendamento?', () => { DB.appts = DB.appts.filter(a => a.id !== +el.dataset.id); save(); toast('Agendamento excluído'); render(); }, 'Excluir', true);
-
-ACT.appt = el => {
-  const a = M.appts.get(+el.dataset.id); if (!a) return; const c = client(a.clientId), b = barber(a.barberId), s = STATUS[a.status];
-  const msg = fillMsg(DB.cfg.msgConfirma, { nome: (c?.nome || '').split(' ')[0], barbearia: DB.cfg.nome, data: fmtDate(a.date), hora: a.time, servico: apptSvcNames(a), barbeiro: b.nome.split(' ')[0] });
-  const next = { agendado: [['confirmado', 'Confirmar presença', 'btn-brass']], confirmado: [['andamento', 'Iniciar atendimento', 'btn-brass']], andamento: [] }[a.status] || [];
-  const canPay = ['agendado', 'confirmado', 'andamento'].includes(a.status);
+ACT.callNext = el => {
+  const bid = +el.dataset.id, q = queueToday(), a = q.wait.find(x => x.barberId === bid) || q.wait.find(x => !x.barberId) || q.wait[0];
+  if (!a) return toast('Ninguém aguardando na fila', 'bad'); callTo(a, bid);
+};
+ACT.qItem = el => {
+  const a = M.appts.get(+el.dataset.id); if (!a) return; const c = client(a.clientId), live = a.status === 'andamento';
+  const busy = new Set(apptsOn(TODAY).filter(x => x.status === 'andamento').map(x => x.barberId));
+  const msg = fillMsg(DB.cfg.msgVez, { nome: (c?.nome || '').split(' ')[0], barbearia: DB.cfg.nome, barbeiro: (a.barberId ? barber(a.barberId) : DB.barbers[0]).nome.split(' ')[0] });
   openModal({
-    title: 'Agendamento', body: `
-    <div class="who-cell" style="gap:12px"><div style="flex:1"><h3 style="font-size:18px">${esc(c?.nome || 'Cliente avulso')}</h3><span class="muted">${esc(c?.tel || 'sem telefone')}</span></div>${badge(s.l, { agendado: 'info', confirmado: 'ok', andamento: 'brass', concluido: 'ok', faltou: 'bad', cancelado: '' }[a.status])}</div>
-    <dl class="kv"><dt>Data e horário</dt><dd style="text-transform:capitalize">${fmtDate(a.date, { weekday: 'short', day: '2-digit', month: 'short' })} · ${a.time} às ${toTime(toMin(a.time) + a.dur)}</dd>
-    <dt>Barbeiro</dt><dd>${esc(b.nome)}</dd><dt>Serviços</dt><dd>${esc(apptSvcNames(a))}</dd><dt>Valor previsto</dt><dd>${brl(apptValue(a))}</dd>${a.obs ? `<dt>Observação</dt><dd>${esc(a.obs)}</dd>` : ''}${c?.obs ? `<dt>Ficha do cliente</dt><dd>${esc(c.obs)}</dd>` : ''}</dl>`,
-    foot: `${canPay ? `<button class="btn btn-danger btn-sm" data-act="apptStatus" data-id="${a.id}" data-s="cancelado">Cancelar</button><button class="btn btn-sm spacer" data-act="apptStatus" data-id="${a.id}" data-s="faltou">Faltou</button>` : '<span class="spacer"></span>'}
-    ${c?.tel ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msg)}">${ic('chat', 15)} WhatsApp</a>` : ''}
-    ${a.status !== 'concluido' ? `<button class="btn btn-sm" data-act="apptEdit" data-id="${a.id}">${ic('edit', 15)} Editar</button>` : ''}
-    ${next.map(n => `<button class="btn btn-sm ${n[2]}" data-act="apptStatus" data-id="${a.id}" data-s="${n[0]}">${n[1]}</button>`).join('')}
-    ${canPay ? `<button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Finalizar e cobrar</button>` : ''}
-    ${a.status === 'concluido' && a.saleId ? `<button class="btn btn-sm" data-act="sale" data-id="${a.saleId}">Ver venda</button>` : ''}`
+    title: esc(c?.nome || 'Cliente avulso'), body: `<div class="who-cell" style="gap:10px">${badge(STATUS[a.status].l, live ? 'brass' : 'info')}<span class="muted">chegou às ${a.time} · ${c?.tel ? esc(c.tel) : 'sem telefone'}</span></div>
+    <dl class="kv"><dt>Serviços</dt><dd>${esc(apptSvcNames(a))}</dd><dt>Valor previsto</dt><dd>${brl(apptValue(a))}</dd><dt>Duração prevista</dt><dd>${a.dur} min</dd>${a.barberId ? `<dt>Barbeiro</dt><dd>${esc(barber(a.barberId).nome)}</dd>` : ''}${a.obs ? `<dt>Observação</dt><dd>${esc(a.obs)}</dd>` : ''}${c?.obs ? `<dt>Ficha do cliente</dt><dd>${esc(c.obs)}</dd>` : ''}</dl>
+    ${!live ? `<div class="form-grid">${fld('Chamar para a cadeira de', sel('qb', DB.barbers.filter(b => b.ativo).map(b => [b.id, b.nome + (busy.has(b.id) ? ' (ocupado)' : '')]), a.barberId || (DB.barbers.find(b => b.ativo && !busy.has(b.id)) || DB.barbers[0]).id, 'id="q-barber"'), 'full')}</div>` : ''}`,
+    foot: `<button class="btn btn-danger btn-sm spacer" data-act="queueLeave" data-id="${a.id}">Desistiu</button>${c?.tel && !live ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msg)}">${ic('chat', 15)} Avisar</a>` : ''}<button class="btn btn-sm" data-act="queueEdit" data-id="${a.id}">${ic('edit', 15)} Editar</button>
+    ${live ? `<button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Finalizar e cobrar</button>` : `<button class="btn btn-sm btn-brass" data-act="queueCall" data-id="${a.id}">Chamar para a cadeira</button>`}`
   });
 };
-ACT.apptEdit = el => apptForm(M.appts.get(+el.dataset.id));
-ACT.apptStatus = el => { M.appts.get(+el.dataset.id).status = el.dataset.s; save(); closeModal(); toast('Status: ' + STATUS[el.dataset.s].l); render(); };
+ACT.queueCall = el => callTo(M.appts.get(+el.dataset.id), +$('#q-barber').value);
+ACT.queueEdit = el => queueForm(M.appts.get(+el.dataset.id));
+ACT.queueLeave = el => confirmBox('Tirar este cliente da fila (desistiu)?', () => { M.appts.get(+el.dataset.id).status = 'desistiu'; save(); toast('Cliente removido da fila'); render(); }, 'Tirar da fila', true);
 ACT.apptPay = el => checkout({ apptId: +el.dataset.id });
 
 /* ================= CAIXA ================= */
@@ -176,7 +155,7 @@ VIEWS.caixa = () => {
   const d = UI.cxDate, sales = salesOn(d).slice().sort((a, b) => b.time.localeCompare(a.time));
   const cs = sales.map(calcSale), total = sum(cs, c => c.total), tips = sum(sales, s => s.tip || 0);
   const por = { pix: 0, credito: 0, debito: 0, dinheiro: 0 }; sales.forEach((s, i) => por[s.pag] += cs[i].total);
-  const aCobrar = d === TODAY ? apptsOn(d).filter(a => ['agendado', 'confirmado', 'andamento'].includes(a.status) && toMin(a.time) <= NOW_MIN + 60).sort((a, b) => a.time.localeCompare(b.time)) : [];
+  const aCobrar = d === TODAY ? apptsOn(d).filter(a => a.status === 'andamento').sort((a, b) => a.time.localeCompare(b.time)) : [];
   return `
   <div class="page-h"><div><h1>Caixa</h1><p>Vendas, recebimentos e fechamento do dia</p></div>
     <div class="acts"><button class="btn no-print" onclick="window.print()">${ic('print', 16)} Imprimir fechamento</button><button class="btn btn-primary no-print" data-act="newSale">${ic('plus', 16)} Nova venda</button></div></div>
@@ -187,11 +166,27 @@ VIEWS.caixa = () => {
     <div class="card kpi"><small>Gorjetas (100% do barbeiro)</small><b>${brl(tips)}</b></div>
     <div class="card kpi"><small>Taxas de cartão</small><b>${brl(sum(cs, c => c.fee))}</b><div class="sub">Líquido: ${brl(total - sum(cs, c => c.fee))}</div></div></div>
   <div class="pay-pills mt">${Object.keys(PAG).map(k => `<div class="pay-pill"><small>${PAG[k]}</small><b>${brl(por[k])}</b></div>`).join('')}</div>
-  ${aCobrar.length ? `<div class="card mt no-print"><div class="card-h"><h3>Aguardando pagamento</h3><span class="muted">${aCobrar.length} atendimento(s)</span></div>${aCobrar.map(a => `<div class="list-row"><span class="time-pill">${a.time}</span><div class="grow"><b>${esc(client(a.clientId)?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))} · ${esc(barber(a.barberId).nome)}</small></div><b>${brl(apptValue(a))}</b><button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Cobrar</button></div>`).join('')}</div>` : ''}
+  ${gavetaCard(d)}
+  ${aCobrar.length ? `<div class="card mt no-print"><div class="card-h"><h3>Em atendimento (cobrar ao finalizar)</h3><span class="muted">${aCobrar.length} atendimento(s)</span></div>${aCobrar.map(a => `<div class="list-row"><span class="time-pill">${a.time}</span><div class="grow"><b>${esc(client(a.clientId)?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))} · ${esc(barber(a.barberId).nome)}</small></div><b>${brl(apptValue(a))}</b><button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Cobrar</button></div>`).join('')}</div>` : ''}
   <div class="card mt"><div class="card-h"><h3>Vendas do dia</h3></div>${sales.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Hora</th><th>Cliente</th><th>Itens</th><th>Barbeiro</th><th>Pagamento</th><th class="num">Total</th></tr></thead><tbody>
     ${sales.map((s, i) => `<tr data-act="sale" data-id="${s.id}"><td>${s.time}</td><td>${esc(client(s.clientId)?.nome || 'Cliente avulso')}</td><td class="muted">${esc(s.items.map(i => (i.qtd > 1 ? i.qtd + '× ' : '') + i.nome).join(', '))}</td><td>${esc(barber(s.barberId).nome.split(' ')[0])}</td><td>${badge(PAG[s.pag])}</td><td class="num"><b>${brl(cs[i].total)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="5">Total</td><td class="num">${brl(total)}</td></tr></tfoot></table></div>` : empty('Nenhuma venda neste dia.')}</div>`;
 };
+function gavetaCard(d) {
+  const g = gaveta(d), r = g.r, ed = d === TODAY, fech = r?.fechamento;
+  const dif = fech ? fech.contado - g.esperado : 0;
+  const head = `<div class="card-h"><h3>Gaveta de dinheiro</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${!r ? badge('Caixa não aberto', 'warn') : fech ? badge('Fechado às ' + fech.hora, 'ok') : badge('Aberto', 'brass')}${ed && r && !fech ? `<button class="btn btn-sm" data-act="cxMov" data-t="suprimento">+ Suprimento</button><button class="btn btn-sm" data-act="cxMov" data-t="sangria">− Sangria</button><button class="btn btn-sm btn-primary" data-act="cxClose">Fechar caixa</button>` : ''}${ed && fech ? '<button class="btn btn-sm" data-act="cxReopen">Reabrir</button>' : ''}</div></div>`;
+  if (!r) return `<div class="card mt no-print">${head}<div class="card-b">${ed ? '<p class="muted-p" style="margin-bottom:12px">Informe o troco inicial para começar o dia e conferir a gaveta no fechamento.</p><button class="btn btn-brass" data-act="cxOpen">Abrir caixa</button>' : '<span class="muted">Sem registro de caixa neste dia.</span>'}</div></div>`;
+  return `<div class="card mt no-print">${head}<div class="card-b grid g2" style="align-items:start"><dl class="kv"><dt>Troco inicial</dt><dd>${brl(r.abertura)}</dd><dt>+ Vendas em dinheiro</dt><dd>${brl(g.din)}</dd><dt>+ Suprimentos</dt><dd>${brl(g.sup)}</dd><dt>− Sangrias</dt><dd>${brl(g.sang)}</dd><dt class="tot">Esperado na gaveta</dt><dd class="tot">${brl(g.esperado)}</dd>${fech ? `<dt>Valor contado</dt><dd>${brl(fech.contado)}</dd><dt>Diferença</dt><dd>${badge(dif === 0 ? 'Confere' : (dif > 0 ? 'Sobra ' : 'Falta ') + brl(Math.abs(dif)), dif === 0 ? 'ok' : 'bad')}</dd>` : ''}</dl>
+    <div>${r.movs.length ? r.movs.map(m => `<div class="list-row" style="padding-left:0;padding-right:0"><div class="grow"><b>${m.tipo === 'sangria' ? 'Sangria' : 'Suprimento'}</b><small>${esc(m.desc)} · ${m.hora}</small></div><b>${m.tipo === 'sangria' ? '− ' : '+ '}${brl(m.valor)}</b></div>`).join('') : '<span class="muted">Sem retiradas ou reforços no dia.</span>'}</div></div></div>`;
+}
+ACT.cxOpen = () => openModal({ title: 'Abrir caixa', body: `<form id="f-cx" onsubmit="return false">${fld('Troco inicial na gaveta (R$)', inp('valor', 100, 'number', 'min="0" step="1"'))}</form>`, foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="cxOpenSave">Abrir caixa</button>` });
+ACT.cxOpenSave = () => { DB.caixa[TODAY] = { abertura: num2(formData($('#f-cx')).valor), movs: [], fechamento: null }; save(); closeModal(); toast('Caixa aberto'); render(); };
+ACT.cxMov = el => { const sang = el.dataset.t === 'sangria'; openModal({ title: sang ? 'Sangria (retirada)' : 'Suprimento (reforço de troco)', body: `<form id="f-cx" class="form-grid" onsubmit="return false">${fld('Valor (R$)', inp('valor', '', 'number', 'min="1" step="1"'))}${fld('Motivo', inp('desc', sang ? 'Retirada do dono' : 'Reforço de troco'))}</form>`, foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="cxMovSave" data-t="${el.dataset.t}">Registrar</button>` }); };
+ACT.cxMovSave = el => { const d = formData($('#f-cx')); if (!num2(d.valor)) return toast('Informe o valor', 'bad'); DB.caixa[TODAY].movs.push({ id: nextId(), tipo: el.dataset.t, valor: num2(d.valor), desc: d.desc, hora: toTime(nowMin()) }); save(); closeModal(); toast('Lançamento registrado'); render(); };
+ACT.cxClose = () => { const g = gaveta(TODAY); openModal({ title: 'Fechar caixa', body: `<p class="muted-p">Conte o dinheiro da gaveta. O sistema espera <b>${brl(g.esperado)}</b>.</p><form id="f-cx" onsubmit="return false">${fld('Valor contado (R$)', inp('valor', g.esperado.toFixed(2), 'number', 'min="0" step="0.01"'))}</form>`, foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="cxCloseSave">Fechar caixa</button>` }); };
+ACT.cxCloseSave = () => { DB.caixa[TODAY].fechamento = { contado: num2(formData($('#f-cx')).valor), hora: toTime(nowMin()) }; save(); closeModal(); toast('Caixa fechado'); render(); };
+ACT.cxReopen = () => { DB.caixa[TODAY].fechamento = null; save(); toast('Caixa reaberto'); render(); };
 ACT.cxNav = el => { UI.cxDate = addDays(UI.cxDate, +el.dataset.n); render(); };
 CHG.cxDate = el => { if (el.value) { UI.cxDate = el.value; render(); } };
 ACT.newSale = () => checkout({});
@@ -239,7 +234,7 @@ ACT.ckRm = el => { CK.items.splice(+el.dataset.n, 1); ckItems(); };
 ACT.ckPay = () => {
   const f = $('#f-ck'), d = formData(f); if (!CK.items.length) return $('#ck-err').textContent = 'Adicione pelo menos um item.';
   const sub = sum(CK.items, i => i.qtd * i.preco), a = CK.apptId ? M.appts.get(CK.apptId) : null;
-  const sale = { id: nextId(), date: a ? a.date : TODAY, time: a ? a.time : toTime(NOW_MIN), clientId: resolveClient(d.cliente, ''), barberId: +d.barberId, items: CK.items, desc: Math.min(num2(d.desc), sub), tip: num2(d.tip), pag: d.pag, apptId: CK.apptId || null };
+  const sale = { id: nextId(), date: a ? a.date : TODAY, time: a ? a.time : toTime(nowMin()), clientId: resolveClient(d.cliente, ''), barberId: +d.barberId, items: CK.items, desc: Math.min(num2(d.desc), sub), tip: num2(d.tip), pag: d.pag, apptId: CK.apptId || null };
   for (const i of CK.items) if (i.t === 'p') product(i.id).estoque = Math.max(0, product(i.id).estoque - i.qtd);
   DB.sales.push(sale); if (a) { a.status = 'concluido'; a.saleId = sale.id; }
   save(); closeModal(); toast('Pagamento registrado · ' + brl(calcSale(sale).total + sale.tip)); render();
@@ -256,9 +251,9 @@ ACT.sale = el => {
   });
 };
 ACT.printModal = printModal;
-ACT.saleDel = el => confirmBox('Estornar esta venda? Os produtos voltam ao estoque e o atendimento volta para a agenda.', () => {
+ACT.saleDel = el => confirmBox('Estornar esta venda? Os produtos voltam ao estoque e o atendimento volta para a fila.', () => {
   const s = M.sales.get(+el.dataset.id);
   for (const i of s.items) if (i.t === 'p' && product(i.id)) product(i.id).estoque += i.qtd;
-  const a = s.apptId && M.appts.get(s.apptId); if (a) { a.status = 'confirmado'; a.saleId = null; }
+  const a = s.apptId && M.appts.get(s.apptId); if (a) { a.status = 'andamento'; a.saleId = null; }
   DB.sales = DB.sales.filter(x => x.id !== s.id); save(); toast('Venda estornada'); render();
 }, 'Estornar', true);

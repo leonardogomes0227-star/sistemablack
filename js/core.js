@@ -11,6 +11,7 @@ const pd = s => new Date(s + 'T12:00:00');
 const addDays = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return iso(d); };
 const TODAY = iso(new Date());
 const NOW_MIN = new Date().getHours() * 60 + new Date().getMinutes();
+const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const fmtDate = (s, o) => pd(s).toLocaleDateString('pt-BR', o || { day: '2-digit', month: '2-digit' });
@@ -28,9 +29,8 @@ const pct = (a, b) => b ? ((a - b) / b) * 100 : null;
 const initials = n => n.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const PAG = { pix: 'Pix', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro' };
 const STATUS = {
-  agendado: { l: 'Agendado', c: 'st-sched' }, confirmado: { l: 'Confirmado', c: 'st-conf' },
-  andamento: { l: 'Em atendimento', c: 'st-live' }, concluido: { l: 'Concluído', c: 'st-done' },
-  faltou: { l: 'Faltou', c: 'st-miss' }, cancelado: { l: 'Cancelado', c: 'st-cancel' }
+  aguardando: { l: 'Aguardando', c: 'st-sched' }, andamento: { l: 'Em atendimento', c: 'st-live' },
+  concluido: { l: 'Concluído', c: 'st-done' }, desistiu: { l: 'Desistiu', c: 'st-miss' }
 };
 const digits = s => String(s || '').replace(/\D/g, '');
 const wa = (tel, msg) => `https://wa.me/55${digits(tel)}?text=${encodeURIComponent(msg || '')}`;
@@ -64,7 +64,7 @@ const ICONS = {
 const ic = (n, s = 18) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 
 /* ============ persistência (somente navegador) ============ */
-const KEY = 'barbearia-demo-v3';
+const KEY = 'barbearia-demo-v5';
 let DB, M = {};
 function load() {
   try { const r = JSON.parse(localStorage.getItem(KEY)); if (r && r.seedDay === TODAY) { DB = r; reindex(); return; } } catch (e) { }
@@ -122,6 +122,12 @@ function monthStats(m) {
   const lucro = bruta + aluguel - taxas - comiss - despesas;
   return { parcial, sales, n: sales.length, bruta, serv, prod, taxas, comiss, aluguel, despesas, exps, lucro, margem: bruta ? lucro / (bruta + aluguel) * 100 : 0, porPag, ticket: sales.length ? bruta / sales.length : 0 };
 }
+function gaveta(d) {
+  const r = DB.caixa[d] || null, sales = salesOn(d);
+  const din = sum(sales.filter(s => s.pag === 'dinheiro'), s => calcSale(s).total + (s.tip || 0));
+  const sang = sum((r?.movs || []).filter(m => m.tipo === 'sangria'), m => m.valor), sup = sum((r?.movs || []).filter(m => m.tipo === 'suprimento'), m => m.valor);
+  return { r, din, sang, sup, esperado: (r ? r.abertura : 0) + din + sup - sang };
+}
 function cliStats(c) {
   const sales = M.salesByClient.get(c.id) || [];
   const total = sum(sales, s => calcSale(s).total);
@@ -129,11 +135,8 @@ function cliStats(c) {
   const dias = ultima ? Math.round((pd(TODAY) - pd(ultima)) / 864e5) : null;
   let tag = 'Ativo';
   if (!sales.length) tag = 'Sem visitas'; else if (dias > 45) tag = 'Sumido'; else if (sales.length >= 12) tag = 'Fiel'; else if (sales.length <= 2 && ultima >= addDays(TODAY, -30)) tag = 'Novo';
-  return { sales, n: sales.length, total, ultima, dias, ticket: sales.length ? total / sales.length : 0, tag };
-}
-function hasConflict(bid, date, start, dur, ignoreId) {
-  const e = start + dur;
-  return apptsOn(date).find(a => a.id !== ignoreId && a.barberId === bid && !['cancelado', 'faltou'].includes(a.status) && toMin(a.time) < e && toMin(a.time) + a.dur > start);
+  const brindes = Math.max(0, Math.floor(sales.length / 10) - (c.resgates || 0));
+  return { brindes, ciclo: sales.length % 10, sales, n: sales.length, total, ultima, dias, ticket: sales.length ? total / sales.length : 0, tag };
 }
 const apptSvcNames = a => a.svc.map(id => service(id)?.nome).filter(Boolean).join(' + ');
 const apptValue = a => sum(a.svc, id => service(id)?.preco || 0);
