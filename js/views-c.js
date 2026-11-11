@@ -98,12 +98,12 @@ VIEWS.relatorios = () => {
   const total = sum(sales, s => calcSale(s).total);
   const hrs = []; for (let h = toMin(DB.cfg.abre) / 60; h < toMin(DB.cfg.fecha) / 60; h++) hrs.push(h);
   const dws = [1, 2, 3, 4, 5, 6]; const heat = {}; let hmax = 1;
-  appts.filter(a => a.status === 'concluido').forEach(a => { const k = pd(a.date).getDay() + '_' + Math.floor(toMin(a.time) / 60); heat[k] = (heat[k] || 0) + 1; hmax = Math.max(hmax, heat[k]); });
+  sales.forEach(a => { const k = pd(a.date).getDay() + '_' + Math.floor(toMin(a.time) / 60); heat[k] = (heat[k] || 0) + 1; hmax = Math.max(hmax, heat[k]); });
   const sT = top(sv), pT = top(pr);
   return `<div class="page-h"><div><h1>Relatórios</h1><p>${label} · ${sales.length} vendas</p></div><div class="acts"><button class="btn" data-act="relExport">${ic('download', 16)} Exportar vendas (CSV)</button></div></div>
   <div class="chips" style="margin-bottom:16px">${[['mes', 'Este mês'], ['ant', 'Mês passado'], ['30', '30 dias'], ['90', '90 dias']].map(([k, l]) => `<button class="chip ${r === k ? 'on' : ''}" data-act="relRange" data-k="${k}">${l}</button>`).join('')}</div>
   <div class="grid g4 keep2"><div class="card kpi"><small>Faturamento</small><b>${brl0(total)}</b></div><div class="card kpi"><small>Clientes atendidos</small><b>${cids.length}</b><div class="sub">${novos} novo(s) no período</div></div>
-    <div class="card kpi"><small>Desistências na fila</small><b>${base ? (faltas / base * 100).toFixed(1) : 0}%</b><div class="sub">${faltas} cliente(s) saíram sem atendimento</div></div><div class="card kpi"><small>Retorno de clientes</small><b>${cids.length ? ((cids.length - novos) / cids.length * 100).toFixed(0) : 0}%</b><div class="sub">já eram clientes antes</div></div></div>
+    <div class="card kpi"><small>Descontos concedidos</small><b>${brl0(sum(sales, s => s.desc || 0))}</b><div class="sub">${sales.filter(s => s.desc).length} venda(s) com desconto</div></div><div class="card kpi"><small>Retorno de clientes</small><b>${cids.length ? ((cids.length - novos) / cids.length * 100).toFixed(0) : 0}%</b><div class="sub">já eram clientes antes</div></div></div>
   <div class="grid g2 mt"><div class="card"><div class="card-h"><h3>Serviços mais vendidos</h3></div><div class="card-b">${sT.length ? sT.map(([n, o]) => hbar(esc(n), o.v, sT[0][1].v, `${brl0(o.v)} <span class="muted" style="font-weight:400">· ${o.q}×</span>`)).join('') : empty('Sem dados')}</div></div>
     <div class="card"><div class="card-h"><h3>Produtos mais vendidos</h3></div><div class="card-b">${pT.length ? pT.map(([n, o]) => hbar(esc(n), o.v, pT[0][1].v, `${brl0(o.v)} <span class="muted" style="font-weight:400">· ${o.q} un.</span>`, 'var(--brass)')).join('') : empty('Sem dados')}</div></div></div>
   <div class="card mt"><div class="card-h"><h3>Horários de maior movimento</h3><span class="muted">Quanto mais escuro, mais atendimentos</span></div><div class="card-b" style="overflow-x:auto"><div class="heat" style="grid-template-columns:70px repeat(${hrs.length},minmax(38px,1fr));min-width:560px"><span></span>${hrs.map(h => `<span class="heat-h">${h}h</span>`).join('')}
@@ -126,19 +126,68 @@ VIEWS.config = () => {
   <div class="card"><div class="card-h"><h3>Funcionamento</h3></div><div class="card-b form-grid">${fld('Abre às', inp('abre', c.abre, 'time'))}${fld('Fecha às', inp('fecha', c.fecha, 'time'))}
     <div class="full"><span class="muted" style="font-size:13px;font-weight:500">Dias de funcionamento</span><div class="chips" style="margin-top:6px">${DIAS.map((d, i) => `<label class="check"><input type="checkbox" name="dia" value="${i}" ${c.dias.includes(i) ? 'checked' : ''}> ${d.slice(0, 3)}</label>`).join('')}</div></div></div></div>
   <div class="card"><div class="card-h"><h3>Taxas da maquininha</h3></div><div class="card-b form-grid">${fld('Pix (%)', inp('taxaPix', c.taxaPix, 'number', 'min="0" step="0.1"'))}${fld('Débito (%)', inp('taxaDeb', c.taxaDeb, 'number', 'min="0" step="0.1"'))}${fld('Crédito (%)', inp('taxaCred', c.taxaCred, 'number', 'min="0" step="0.1"'))}<div class="full note">As taxas entram no cálculo do lucro líquido do financeiro.</div></div></div>
-  <div class="card"><div class="card-h"><h3>Mensagens de WhatsApp</h3></div><div class="card-b form-grid">${fld('Aviso de chamada (sua vez)', `<textarea name="msgVez" rows="2">${esc(c.msgVez)}</textarea>`, 'full')}${fld('Aniversário', `<textarea name="msgAniv" rows="2">${esc(c.msgAniv)}</textarea>`, 'full')}${fld('Cliente sumido', `<textarea name="msgSumido" rows="2">${esc(c.msgSumido)}</textarea>`, 'full')}<div class="full note">Variáveis: {nome} {barbeiro} {barbearia}</div></div></div>
+  <div class="card"><div class="card-h"><h3>Mensagens de WhatsApp</h3></div><div class="card-b form-grid">${fld('Aniversário', `<textarea name="msgAniv" rows="2">${esc(c.msgAniv)}</textarea>`, 'full')}${fld('Cliente sumido', `<textarea name="msgSumido" rows="2">${esc(c.msgSumido)}</textarea>`, 'full')}<div class="full note">Variáveis: {nome} {barbearia}</div></div></div>
   </form>
   <div class="card mt"><div class="card-h"><h3>Acessos e permissões</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Perfil</th><th>Pode ver</th><th>Não vê</th></tr></thead><tbody>
-    <tr><td><b>Dono</b></td><td>Tudo: painel, caixa, financeiro, comissões de todos, equipe e configurações</td><td class="muted">—</td></tr>
-    <tr><td><b>Recepção</b></td><td>Painel, fila de atendimento, caixa (com gaveta), clientes e catálogo</td><td class="muted">Financeiro, comissões, equipe, configurações</td></tr>
-    <tr><td><b>Barbeiro</b></td><td>Fila e cadeira, clientes e o próprio extrato de comissão</td><td class="muted">Caixa, financeiro e dados dos colegas</td></tr></tbody></table></div></div>
+    <tr><td><b>Dono</b></td><td>Tudo: painel, caixa, extrato, financeiro, comissões de todos, equipe e configurações</td><td class="muted">—</td></tr>
+    <tr><td><b>Recepção</b></td><td>Caixa (lançar atendimentos e gaveta), clientes e catálogo</td><td class="muted">Painel, extrato, financeiro, comissões, equipe, configurações</td></tr>
+    <tr><td><b>Barbeiro</b></td><td>Clientes e o próprio extrato de comissão</td><td class="muted">Caixa, financeiro e dados dos colegas</td></tr></tbody></table></div></div>
   <div class="acts mt" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" data-act="cfgSave">Salvar configurações</button><button class="btn" data-act="backup">${ic('download', 16)} Baixar backup (JSON)</button><button class="btn btn-danger" data-act="resetDemo">Restaurar dados de exemplo</button></div>`;
 };
 ACT.cfgSave = () => {
   const f = $('#f-cfg'), d = formData(f), c = DB.cfg;
   if (toMin(d.fecha) <= toMin(d.abre)) return toast('O horário de fechamento deve ser depois da abertura', 'bad');
-  Object.assign(c, { nome: d.nome.trim() || c.nome, endereco: d.endereco, tel: d.tel, metaMes: num2(d.metaMes), abre: d.abre, fecha: d.fecha, dias: $$('[name=dia]:checked', f).map(i => +i.value), taxaPix: num2(d.taxaPix), taxaDeb: num2(d.taxaDeb), taxaCred: num2(d.taxaCred), msgVez: d.msgVez, msgAniv: d.msgAniv, msgSumido: d.msgSumido });
+  Object.assign(c, { nome: d.nome.trim() || c.nome, endereco: d.endereco, tel: d.tel, metaMes: num2(d.metaMes), abre: d.abre, fecha: d.fecha, dias: $$('[name=dia]:checked', f).map(i => +i.value), taxaPix: num2(d.taxaPix), taxaDeb: num2(d.taxaDeb), taxaCred: num2(d.taxaCred),  msgAniv: d.msgAniv, msgSumido: d.msgSumido });
   save(); toast('Configurações salvas'); render();
 };
 ACT.backup = () => download('backup-barbearia.json', JSON.stringify(DB, null, 1), 'application/json');
 ACT.resetDemo = () => confirmBox('Apagar as alterações feitas e voltar aos dados de exemplo?', () => { resetDemo(); toast('Dados de exemplo restaurados'); render(); }, 'Restaurar', true);
+
+
+/* ================= EXTRATO: tudo que entra e sai ================= */
+function ledger(from, to, { barberId = null } = {}) {
+  const items = [];
+  for (const s of DB.sales) {
+    if (s.date < from || s.date > to || (barberId && s.barberId !== barberId)) continue;
+    const c = calcSale(s), cl = client(s.clientId);
+    items.push({ k: 'in', date: s.date, time: s.time, desc: (cl ? cl.nome : 'Cliente avulso') + ' · ' + s.items.map(i => (i.qtd > 1 ? i.qtd + '× ' : '') + i.nome).join(', '), cat: s.items.every(i => i.t === 'p') ? 'Produtos' : 'Serviços', who: barber(s.barberId).nome, pag: PAG[s.pag], valor: c.total, sid: s.id });
+  }
+  if (!barberId) for (const e of DB.expenses) {
+    if (e.date < from || e.date > to) continue;
+    items.push({ k: 'out', date: e.date, time: '12:00', desc: e.descricao, cat: e.categoria, who: '—', pag: e.pago ? 'Pago' : e.date < TODAY ? 'Em atraso' : 'A pagar', valor: e.valor, pend: !e.pago, eid: e.id });
+  }
+  for (const v of DB.vales) {
+    if (v.date < from || v.date > to || (barberId && v.barberId !== barberId)) continue;
+    items.push({ k: 'out', date: v.date, time: '12:00', desc: `${v.desc || 'Vale'} · ${barber(v.barberId).nome}`, cat: 'Vales', who: barber(v.barberId).nome, pag: 'Pago', valor: v.valor });
+  }
+  for (const [key, p] of Object.entries(DB.payouts)) {
+    const [bid, m] = key.split('_'); if (p.date < from || p.date > to || (barberId && +bid !== barberId)) continue;
+    items.push({ k: 'out', date: p.date, time: '12:00', desc: `Pagamento de comissão · ${barber(+bid).nome} (${mLabel(m)})`, cat: 'Comissões', who: barber(+bid).nome, pag: 'Pago', valor: Math.max(0, p.valor) });
+  }
+  return items.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+}
+const exRange = () => { const m = ym(TODAY), p = UI.exPeriod; return p === 'hoje' ? [TODAY, TODAY, 'Hoje'] : p === '7' ? [addDays(TODAY, -6), TODAY, 'Últimos 7 dias'] : p === 'mes' ? [m + '-01', mEnd(m), mLabel(m)] : p === 'ant' ? [addMonths(m, -1) + '-01', mEnd(addMonths(m, -1)), mLabel(addMonths(m, -1))] : [addDays(TODAY, -89), TODAY, 'Últimos 90 dias']; };
+VIEWS.extrato = () => {
+  const [from, to, label] = exRange(), bid = UI.exBarber ? +UI.exBarber : null, tipo = UI.exTipo;
+  const all = ledger(from, to, { barberId: bid });
+  let run = 0; all.slice().reverse().forEach(i => { if (!i.pend) run += i.k === 'in' ? i.valor : -i.valor; i.saldo = run; });
+  const ent = sum(all.filter(i => i.k === 'in'), i => i.valor), sai = sum(all.filter(i => i.k === 'out' && !i.pend), i => i.valor), pend = sum(all.filter(i => i.pend), i => i.valor);
+  const list = all.filter(i => tipo === 'todas' || (tipo === 'entradas' ? i.k === 'in' : i.k === 'out')), shown = list.slice(0, 150);
+  const porB = DB.barbers.map(b => ({ b, v: sum(ledger(from, to, { barberId: b.id }).filter(i => i.k === 'in'), i => i.valor), n: ledger(from, to, { barberId: b.id }).filter(i => i.k === 'in').length })).filter(x => x.v).sort((a, b) => b.v - a.v);
+  return `<div class="page-h"><div><h1>Extrato</h1><p>Tudo que entrou e saiu da barbearia · ${label}</p></div><div class="acts"><button class="btn" data-act="exExport">${ic('download', 16)} Exportar CSV</button><button class="btn btn-primary" data-act="expNew">${ic('plus', 16)} Lançar despesa</button></div></div>
+  <div class="toolbar"><div class="chips">${[['hoje', 'Hoje'], ['7', '7 dias'], ['mes', 'Este mês'], ['ant', 'Mês passado'], ['90', '90 dias']].map(([k, l]) => `<button class="chip ${UI.exPeriod === k ? 'on' : ''}" data-act="exPeriod" data-k="${k}">${l}</button>`).join('')}</div>
+    <select data-change="exBarber" style="width:auto;margin-left:auto" aria-label="Filtrar por barbeiro"><option value="">Todos os barbeiros e despesas</option>${DB.barbers.map(b => `<option value="${b.id}" ${UI.exBarber == b.id ? 'selected' : ''}>${esc(b.nome)}</option>`).join('')}</select></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Entrou</small><b style="color:var(--ok)">${brl0(ent)}</b><div class="sub">${all.filter(i => i.k === 'in').length} lançamentos</div></div>
+    <div class="card kpi"><small>Saiu</small><b style="color:var(--bad)">${brl0(sai)}</b><div class="sub">despesas, vales e comissões pagas</div></div>
+    <div class="card kpi" style="border-color:var(--brass)"><small>Saldo do período</small><b>${brl0(ent - sai)}</b><div class="sub">entrou menos saiu</div></div>
+    <div class="card kpi"><small>Contas a pagar</small><b>${brl0(pend)}</b><div class="sub">ainda não saíram do caixa</div></div></div>
+  ${porB.length ? `<div class="card mt"><div class="card-h"><h3>Quanto cada barbeiro fez no período</h3></div><div class="card-b grid g2">${porB.map(x => hbar(`<span class="who-cell">${avatar(x.b, 22)} ${esc(x.b.nome)}</span>`, x.v, porB[0].v, `${brl0(x.v)} <span class="muted" style="font-weight:400">· ${x.n} atend.</span>`, x.b.cor)).join('')}</div></div>` : ''}
+  <div class="chips mt" style="margin-bottom:12px">${[['todas', 'Tudo'], ['entradas', 'Só entradas'], ['saidas', 'Só saídas']].map(([k, l]) => `<button class="chip ${tipo === k ? 'on' : ''}" data-act="exTipo" data-k="${k}">${l}</button>`).join('')}</div>
+  <div class="card">${list.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Barbeiro</th><th>Forma / situação</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Saldo</th></tr></thead><tbody>
+  ${shown.map(i => `<tr ${i.sid ? `data-act="sale" data-id="${i.sid}"` : i.eid ? `data-act="expEdit" data-id="${i.eid}"` : ''}><td class="nowrap">${fmtDate(i.date)}${i.sid ? ' <span class="muted">' + i.time + '</span>' : ''}</td><td>${esc(i.desc)}</td><td>${badge(i.cat)}</td><td class="muted">${esc(i.who === '—' ? '—' : i.who.split(' ')[0])}</td><td>${i.pend ? badge(i.pag, i.pag === 'Em atraso' ? 'bad' : 'warn') : `<span class="muted">${esc(i.pag)}</span>`}</td><td class="num" style="color:var(--ok)">${i.k === 'in' ? brl(i.valor) : ''}</td><td class="num" style="color:var(--bad)">${i.k === 'out' ? brl(i.valor) : ''}</td><td class="num">${i.pend ? '<span class="muted">—</span>' : brl(i.saldo)}</td></tr>`).join('')}</tbody></table></div>
+  <div style="padding:12px 16px" class="muted">Mostrando ${shown.length} de ${list.length} lançamentos. Clique em uma linha para abrir.</div>` : empty('Nenhum lançamento neste filtro.')}</div>`;
+};
+ACT.exPeriod = el => { UI.exPeriod = el.dataset.k; render(); };
+ACT.exTipo = el => { UI.exTipo = el.dataset.k; render(); };
+CHG.exBarber = el => { UI.exBarber = el.value; render(); };
+ACT.exExport = () => { const [f, t] = exRange(); download('extrato.csv', ['Data;Hora;Tipo;Descrição;Categoria;Barbeiro;Forma;Valor', ...ledger(f, t, { barberId: UI.exBarber ? +UI.exBarber : null }).map(i => [i.date, i.sid ? i.time : '', i.k === 'in' ? 'Entrada' : 'Saída', i.desc, i.cat, i.who, i.pag, (i.k === 'in' ? '' : '-') + i.valor.toFixed(2).replace('.', ',')].map(csvCell).join(';'))].join('\n')); };

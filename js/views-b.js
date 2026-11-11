@@ -50,7 +50,7 @@ ACT.cliSave = el => {
 ACT.cliDel = el => confirmBox('Excluir este cliente? O histórico de vendas é mantido como cliente avulso.', () => { const id = +el.dataset.id; DB.clients = DB.clients.filter(c => c.id !== id); save(); toast('Cliente excluído'); render(); }, 'Excluir', true);
 ACT.cliBrinde = el => { const c = client(+el.dataset.id); c.resgates = (c.resgates || 0) + 1; save(); closeModal(); toast('Brinde resgatado: dê um serviço sem custo e registre na venda com desconto'); render(); };
 ACT.cliEdit = el => cliForm(client(+el.dataset.id));
-ACT.cliAgenda = el => { closeModal(); queueForm({ clientId: +el.dataset.id }); };
+ACT.cliAgenda = el => { closeModal(); checkout({ clientId: +el.dataset.id }); };
 ACT.cliOpen = el => {
   const c = client(+el.dataset.id), s = cliStats(c), fut = [];
   const hist = s.sales.slice().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 10);
@@ -66,7 +66,7 @@ ACT.cliOpen = el => {
     ${c.obs ? `<div class="note"><b>Preferências:</b> ${esc(c.obs)}</div>` : ''}
     ${fut.length ? `<div><b>Próximos horários</b>${fut.slice(0, 3).map(a => `<div class="list-row" style="padding-left:0;padding-right:0"><span class="time-pill">${fmtDate(a.date)}</span><div class="grow">${a.time} · ${esc(apptSvcNames(a))}<small>${esc(barber(a.barberId).nome)}</small></div>${badge(STATUS[a.status].l)}</div>`).join('')}</div>` : ''}
     <div><b>Histórico de atendimentos</b>${hist.length ? `<div class="tbl-wrap"><table class="t"><tbody>${hist.map(h => `<tr><td>${fmtFull(h.date)}</td><td>${esc(h.items.map(i => i.nome).join(', '))}</td><td>${esc(barber(h.barberId).nome.split(' ')[0])}</td><td class="num">${brl(calcSale(h).total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted" style="margin-top:6px">Nenhuma visita registrada.</p>'}</div>`,
-    foot: `<button class="btn btn-sm spacer" data-act="cliEdit" data-id="${c.id}">${ic('edit', 15)} Editar</button>${c.tel ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msgA)}">${ic('chat', 15)} WhatsApp</a>` : ''}<button class="btn btn-primary btn-sm" data-act="cliAgenda" data-id="${c.id}">Colocar na fila</button>`
+    foot: `<button class="btn btn-sm spacer" data-act="cliEdit" data-id="${c.id}">${ic('edit', 15)} Editar</button>${c.tel ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msgA)}">${ic('chat', 15)} WhatsApp</a>` : ''}<button class="btn btn-primary btn-sm" data-act="cliAgenda" data-id="${c.id}">Lançar atendimento</button>`
   });
 };
 

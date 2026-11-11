@@ -138,6 +138,7 @@ function seedData() {
     D.caixa[d] = r;
   }
   for (const c of D.clients) { const n = (M.salesByClient.get(c.id) || []).length; if (n >= 10) c.resgates = Math.floor(n / 10) - (R() < .5 ? 1 : 0); }
+  D.appts = []; D.sales.forEach(s => { s.apptId = null; });
   for (const c of D.clients) { delete c._fav; delete c._pref; delete c._freq; delete c._churn; }
   return D;
 }

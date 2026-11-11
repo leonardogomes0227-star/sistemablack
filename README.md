@@ -1,18 +1,21 @@
 # Sistema de Gestão para Barbearia (demonstração)
 
-Versão de apresentação, 100% no navegador. **Sem banco de dados e sem servidor**: os dados são de exemplo, gerados ao abrir (e guardados só no navegador).
+Sistema de **gerenciamento**: o dono vê tudo que entra e sai e quanto cada barbeiro produziu. Versão de apresentação, 100% no navegador, **sem banco de dados e sem servidor**: os dados são de exemplo, gerados ao abrir (e guardados só no navegador).
 
 Abra `index.html` ou publique a pasta em qualquer hospedagem estática.
 
-## Módulos
-- **Painel**: faturamento do dia/mês, meta e projeção, ranking da equipe, alertas.
-- **Fila de atendimento** (sem hora marcada): cliente chega, entra na fila, é chamado para a cadeira de um barbeiro e cobrado ao finalizar. Espera estimada e aviso por WhatsApp.
-- **Caixa**: comanda, serviços + produtos, desconto, gorjeta, formas de pagamento, estorno, fechamento do dia e **gaveta de dinheiro** (troco inicial, sangria, suprimento, conferência).
-- **Clientes**: histórico, preferências, **cartão fidelidade**, aniversariantes, sumidos, exportar CSV.
-- **Equipe e Comissões**: % por serviço/produto, aluguel de cadeira, vales, gorjetas, fechamento mensal e recibo.
-- **Serviços e produtos**: preços, margem, estoque mínimo, entrada de estoque.
-- **Financeiro**: receita, despesas, taxas de cartão, lucro líquido, contas a pagar.
-- **Relatórios**: mais vendidos, horários de pico, desistências, retorno de clientes.
-- **Configurações**: horários, taxas, mensagens, perfis (Dono, Recepção, Barbeiro).
+## Visão do dono
+- **Painel**: entrou hoje, entradas/saídas/lucro do mês, **quanto cada barbeiro fez** (hoje, 7 dias, mês, ticket, comissão, meta), para onde vai o dinheiro, últimas movimentações e alertas.
+- **Extrato**: todas as entradas e saídas (atendimentos, despesas, vales, comissões pagas) com saldo, filtros por período, tipo e barbeiro, e exportação em CSV.
+- **Financeiro**: resultado do mês, lucro líquido, formas de pagamento, despesas por categoria, contas a pagar.
+- **Relatórios**: mais vendidos, horários de pico, retorno de clientes, descontos, desempenho por barbeiro.
 
-Na tela de login escolha o perfil para ver o que cada pessoa enxerga.
+## Operação
+- **Caixa**: lançar cada atendimento/venda (serviços + produtos, desconto, gorjeta, forma de pagamento), estorno, fechamento do dia e gaveta de dinheiro (troco, sangria, suprimento, conferência).
+- **Clientes**: histórico, preferências, cartão fidelidade, aniversariantes, sumidos.
+- **Serviços e produtos**: preços, margem, estoque mínimo, entrada de estoque.
+
+## Equipe
+- **Barbeiros e Comissões**: % por serviço/produto ou aluguel de cadeira, vales, gorjetas, fechamento mensal, pagamento e recibo.
+
+Perfis de acesso: Dono (tudo), Recepção (caixa, clientes, catálogo) e Barbeiro (só o próprio extrato de comissão).

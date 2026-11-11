@@ -1,67 +1,70 @@
 'use strict';
-const UI = { route: 'dashboard', dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, relRange: 'mes', finFilter: 'todas' };
+const UI = { route: 'dashboard', dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', exPeriod: 'mes', exTipo: 'todas', exBarber: '', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, relRange: 'mes', finFilter: 'todas' };
 const ACT = {}; const CHG = {}; const VIEWS = {};
 let SESSION = null;
 const isDono = () => SESSION.role === 'dono';
 const visibleBarbers = () => DB.barbers.filter(b => b.ativo && (SESSION.role !== 'barbeiro' || b.id === SESSION.me));
 
-/* ================= PAINEL ================= */
+/* ================= PAINEL DO DONO ================= */
 VIEWS.dashboard = () => {
   const m = ym(TODAY), pm = addMonths(m, -1), day = +TODAY.slice(8);
-  const mtd = d => sum(DB.sales.filter(s => s.date >= d.slice(0, 7) + '-01' && s.date <= d), s => calcSale(s).total);
-  const hoje = sum(salesOn(TODAY), s => calcSale(s).total), semPas = sum(salesOn(addDays(TODAY, -7)), s => calcSale(s).total);
-  const mes = mtd(TODAY), mesPas = mtd(`${pm}-${pad(Math.min(day, 28))}`);
-  const ap = apptsOn(TODAY).filter(a => a.status !== 'desistiu');
-  const waitN = ap.filter(a => a.status === 'aguardando').length, liveN = ap.filter(a => a.status === 'andamento').length;
-  const feitos = ap.filter(a => a.status === 'concluido').length;
-  const ms = monthStats(m);
+  const rng = (a, b, bid) => sum(DB.sales.filter(s => s.date >= a && s.date <= b && (!bid || s.barberId === bid)), s => calcSale(s).total);
+  const hoje = rng(TODAY, TODAY), semPas = rng(addDays(TODAY, -7), addDays(TODAY, -7));
+  const ms = monthStats(m), pms = monthStats(pm);
+  const mesPas = rng(pm + '-01', pm + '-' + pad(Math.min(day, 28)));
+  const base = ms.bruta + ms.aluguel, saidas = ms.despesas + ms.comiss + ms.taxas;
   const openDays = d => { let n = 0; const [y, mo] = d.split('-').map(Number); const last = new Date(y, mo, 0).getDate(); for (let i = 1; i <= last; i++) if (DB.cfg.dias.includes(new Date(y, mo - 1, i).getDay())) n++; return n; };
   const elapsed = (() => { let n = 0; for (let i = 1; i <= day; i++) if (DB.cfg.dias.includes(new Date(+m.slice(0, 4), +m.slice(5) - 1, i).getDay())) n++; return n; })();
-  const proj = elapsed ? mes / elapsed * openDays(m) : 0;
-  const meta = DB.cfg.metaMes;
+  const proj = elapsed ? ms.bruta / elapsed * openDays(m) : 0, meta = DB.cfg.metaMes;
+  const days = []; for (let i = UI.dashRange - 1; i >= 0; i--) { const d = addDays(TODAY, -i); const v = rng(d, d); days.push({ v, l: fmtDate(d), hl: d === TODAY, t: `${fmtDate(d)} · ${brl(v)}` }); }
 
-  const days = []; for (let i = UI.dashRange - 1; i >= 0; i--) { const d = addDays(TODAY, -i); const v = sum(salesOn(d), s => calcSale(s).total); days.push({ v, l: fmtDate(d), hl: d === TODAY, t: `${fmtDate(d)} · ${brl(v)}` }); }
+  const rows = DB.barbers.map(b => ({ b, st: stmt(b.id, m), h: rng(TODAY, TODAY, b.id), w: rng(addDays(TODAY, -6), TODAY, b.id) })).filter(r => r.b.ativo || r.st.n).sort((a, b) => b.st.fat - a.st.fat);
+  const T = k => sum(rows, r => r.st[k]);
 
-  const rank = DB.barbers.filter(b => b.ativo).map(b => ({ b, st: stmt(b.id, m) })).sort((a, b) => b.st.fat - a.st.fat);
-  const maxFat = Math.max(...rank.map(r => r.st.fat), 1);
+  const cats = {}; ms.exps.filter(e => e.pago || e.date <= TODAY).forEach(e => cats[e.categoria] = (cats[e.categoria] || 0) + e.valor);
+  const flows = [['Comissões dos barbeiros', ms.comiss, 'var(--ink)'], ...Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => [k, v, 'var(--brass)']), ['Taxas de cartão', ms.taxas, '#8a8a92']];
 
   const baixo = DB.products.filter(p => p.ativo && p.estoque <= p.min);
   const venc = DB.expenses.filter(e => !e.pago && e.date >= TODAY && e.date <= addDays(TODAY, 7));
   const atraso = DB.expenses.filter(e => !e.pago && e.date < TODAY);
-  const anivs = DB.clients.filter(c => { if (!c.nasc) return false; const md = c.nasc.slice(5); for (let i = 0; i < 7; i++) if (addDays(TODAY, i).slice(5) === md) return true; return false; });
+  const anivs = DB.clients.filter(c => { if (!c.nasc) return false; for (let i = 0; i < 7; i++) if (addDays(TODAY, i).slice(5) === c.nasc.slice(5)) return true; return false; });
   const sumidos = DB.clients.filter(c => cliStats(c).tag === 'Sumido').length;
   const comPend = sum(DB.barbers.filter(b => !DB.payouts[b.id + '_' + pm]), b => Math.max(0, stmt(b.id, pm).net));
   const alerts = [];
   if (atraso.length) alerts.push(['bad', 'alert', `${atraso.length} conta(s) em atraso`, brl(sum(atraso, e => e.valor)) + ' · ' + atraso.map(e => e.descricao).join(', '), 'financeiro']);
-  if (venc.length) alerts.push(['warn', 'clock', `${venc.length} conta(s) vencem em 7 dias`, brl(sum(venc, e => e.valor)), 'financeiro']);
+  if (venc.length) alerts.push(['warn', 'clock', `${venc.length} conta(s) vencem em 7 dias`, brl(sum(venc, e => e.valor)), 'extrato']);
+  if (comPend > 0) alerts.push(['brass', 'percent', 'Comissões de ' + mLabel(pm) + ' em aberto', brl(comPend) + ' a pagar aos barbeiros', 'comissoes']);
   if (baixo.length) alerts.push(['warn', 'box', `${baixo.length} produto(s) com estoque baixo`, baixo.map(p => `${p.nome} (${p.estoque})`).join(', '), 'catalogo']);
-  if (comPend > 0) alerts.push(['brass', 'percent', 'Comissões de ' + mLabel(pm) + ' em aberto', brl(comPend) + ' a pagar à equipe', 'comissoes']);
-  if (anivs.length) alerts.push(['info', 'cake', `${anivs.length} aniversariante(s) nos próximos 7 dias`, anivs.slice(0, 3).map(c => c.nome.split(' ')[0]).join(', ') + (anivs.length > 3 ? '…' : ''), 'clientes:aniversario']);
-  if (sumidos) alerts.push(['info', 'users', `${sumidos} clientes sem voltar há mais de 45 dias`, 'Envie uma mensagem para trazê-los de volta', 'clientes:sumido']);
-
+  if (anivs.length) alerts.push(['info', 'cake', `${anivs.length} cliente(s) fazem aniversário em 7 dias`, anivs.slice(0, 3).map(c => c.nome.split(' ')[0]).join(', ') + (anivs.length > 3 ? '…' : ''), 'clientes:aniversario']);
+  if (sumidos) alerts.push(['info', 'users', `${sumidos} clientes sem voltar há mais de 45 dias`, 'Vale chamar no WhatsApp', 'clientes:sumido']);
+  const last = ledger(addDays(TODAY, -30), TODAY).slice(0, 8);
   const hr = new Date().getHours(); const saud = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
   return `
   <section class="hero"><span class="pole" aria-hidden="true"></span>
     <div><span class="hero-eyebrow">${cap(fmtLong(TODAY))}</span><h1>${saud}</h1>
-      <div class="hero-acts"><button class="btn btn-brass" data-act="newQueue">${ic('plus', 16)} Colocar na fila</button><button class="btn btn-ghost-d" data-act="newSale">${ic('receipt', 16)} Nova venda</button></div></div>
-    <div class="hero-n"><small>Faturamento hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span>vs. mesmo dia da semana passada</span></div></div>
+      <div class="hero-acts"><button class="btn btn-brass" data-act="newSale">${ic('plus', 16)} Lançar atendimento</button><button class="btn btn-ghost-d" data-act="expNew">${ic('wallet', 16)} Lançar despesa</button></div></div>
+    <div class="hero-n"><small>Entrou hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span>vs. mesmo dia da semana passada</span></div></div>
   </section>
-  <div class="grid g3 mt">
-    <div class="card kpi"><small>Atendimentos hoje</small><b>${feitos}</b><div class="sub">${waitN} na fila · ${liveN} em atendimento</div></div></div>
-    <div class="card kpi"><small>Faturamento do mês</small><b>${brl0(mes)}</b><div class="kpi-line">${delta(mes, mesPas)}<span class="sub">vs. ${MESES[+pm.slice(5) - 1].toLowerCase()} até hoje</span></div></div>
-    <div class="card kpi"><small>Ticket médio do mês</small><b>${brl(ms.ticket)}</b><div class="sub">${ms.n} atendimentos pagos</div></div>
+  <div class="grid g4 keep2 mt">
+    <div class="card kpi"><small>Entradas do mês</small><b>${brl0(base)}</b><div class="kpi-line">${delta(ms.bruta, mesPas)}<span class="sub">vs. ${MESES[+pm.slice(5) - 1].toLowerCase()} até hoje</span></div></div>
+    <div class="card kpi"><small>Saídas do mês</small><b>${brl0(saidas)}</b><div class="sub">comissões + despesas + taxas</div></div>
+    <div class="card kpi" style="border-color:var(--brass)"><small>Lucro do mês</small><b style="color:${ms.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl0(ms.lucro)}</b><div class="sub">Margem de ${ms.margem.toFixed(0)}%</div></div>
+    <div class="card kpi"><small>Ticket médio</small><b>${brl(ms.ticket)}</b><div class="sub">${ms.n} atendimentos no mês</div></div>
   </div>
+  <div class="card mt"><div class="card-h"><h3>Quanto cada barbeiro fez</h3><span class="muted">Valor dos atendimentos e produtos, já com desconto</span></div>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>Barbeiro</th><th class="num">Hoje</th><th class="num">7 dias</th><th class="num">${MESES[+m.slice(5) - 1]}</th><th class="num">Atend.</th><th class="num">Ticket</th><th class="num">Comissão</th><th class="num">Gorjetas</th><th style="min-width:150px">Meta do mês</th></tr></thead><tbody>
+    ${rows.map(r => `<tr data-act="barStmt" data-id="${r.b.id}"><td><span class="who-cell">${avatar(r.b, 28)}<b>${esc(r.b.nome)}</b></span></td><td class="num">${brl(r.h)}</td><td class="num">${brl(r.w)}</td><td class="num"><b>${brl(r.st.fat)}</b></td><td class="num">${r.st.n}</td><td class="num">${brl(r.st.n ? r.st.fat / r.st.n : 0)}</td><td class="num">${brl(r.st.com)}</td><td class="num">${brl(r.st.tips)}</td><td><div class="progress"><div style="width:${Math.min(100, r.st.fat / r.b.meta * 100)}%"></div></div><span class="muted" style="font-size:12px">${(r.st.fat / r.b.meta * 100).toFixed(0)}% de ${brl0(r.b.meta)}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total da equipe</td><td class="num">${brl(sum(rows, r => r.h))}</td><td class="num">${brl(sum(rows, r => r.w))}</td><td class="num">${brl(T('fat'))}</td><td class="num">${T('n')}</td><td class="num">${brl(T('n') ? T('fat') / T('n') : 0)}</td><td class="num">${brl(T('com'))}</td><td class="num">${brl(T('tips'))}</td><td></td></tr></tfoot></table></div>
+    <div style="padding:14px 20px;border-top:1px solid var(--line)"><div class="hbar-top"><span>Meta da barbearia</span><b>${brl0(ms.bruta)} de ${brl0(meta)}</b></div><div class="progress"><div style="width:${Math.min(100, ms.bruta / meta * 100)}%"></div></div><div class="muted" style="font-size:12.5px;margin-top:6px">Projeção para o fim do mês: <b style="color:var(--ink)">${brl0(proj)}</b> (${(proj / meta * 100).toFixed(0)}% da meta)</div></div></div>
   <div class="grid g-main mt">
-    <div class="card"><div class="card-h"><h3>Faturamento por dia</h3><div class="chips">${[15, 30, 60].map(n => `<button class="chip ${UI.dashRange === n ? 'on' : ''}" data-act="dashRange" data-n="${n}">${n} dias</button>`).join('')}</div></div>
-      <div class="card-b">${bars(days, { every: Math.ceil(UI.dashRange / 6) })}</div></div>
-    <div class="card"><div class="card-h"><h3>Fila agora</h3><button class="btn btn-sm" data-act="go" data-r="fila">Abrir fila</button></div>
-      ${(() => { const l = apptsOn(TODAY).filter(a => ['aguardando', 'andamento'].includes(a.status)).sort((a, b) => (a.status === b.status ? a.time.localeCompare(b.time) : a.status === 'andamento' ? -1 : 1)).slice(0, 7); return l.length ? l.map(a => { const b = a.barberId ? barber(a.barberId) : null, c = client(a.clientId); return `<div class="list-row" data-act="qItem" data-id="${a.id}"><span class="time-pill">${a.time}</span><div class="grow"><b>${esc(c?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))}</small></div>${a.status === 'andamento' ? badge('Atendendo', 'brass') : badge('Aguardando', 'info')}${b ? avatar(b, 26) : ''}</div>`; }).join('') : empty('Ninguém na fila agora.'); })()}</div>
+    <div class="card"><div class="card-h"><h3>Entradas por dia</h3><div class="chips">${[15, 30, 60].map(n => `<button class="chip ${UI.dashRange === n ? 'on' : ''}" data-act="dashRange" data-n="${n}">${n} dias</button>`).join('')}</div></div><div class="card-b">${bars(days, { every: Math.ceil(UI.dashRange / 6) })}</div></div>
+    <div class="card"><div class="card-h"><h3>Para onde vai o dinheiro</h3><span class="muted">${MESES[+m.slice(5) - 1]}</span></div><div class="card-b">
+      ${flows.map(f => hbar(esc(f[0]), f[1], Math.max(base, 1), `${brl0(f[1])} <span class="muted" style="font-weight:400">· ${base ? (f[1] / base * 100).toFixed(0) : 0}%</span>`, f[2])).join('')}
+      <div class="kv" style="margin-top:14px"><dt class="tot">Sobra (lucro)</dt><dd class="tot" style="color:${ms.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl0(ms.lucro)}</dd></div></div></div>
   </div>
   <div class="grid g2 mt">
-    <div class="card"><div class="card-h"><h3>Desempenho da equipe · ${mLabel(m)}</h3></div><div class="card-b">
-      <div style="margin-bottom:18px"><div class="hbar-top"><span>Meta da barbearia</span><b>${brl0(ms.bruta)} de ${brl0(meta)}</b></div><div class="progress"><div style="width:${Math.min(100, ms.bruta / meta * 100)}%"></div></div>
-      <div class="muted" style="font-size:12.5px;margin-top:6px">Projeção para o fim do mês: <b style="color:var(--ink)">${brl0(proj)}</b> (${(proj / meta * 100).toFixed(0)}% da meta)</div></div>
-      ${rank.map(r => hbar(`<span class="who-cell">${avatar(r.b, 22)} ${esc(r.b.nome)}</span>`, r.st.fat, maxFat, `${brl0(r.st.fat)} <span class="muted" style="font-weight:400">· ${r.st.n} atend.</span>`, r.b.cor)).join('')}</div></div>
+    <div class="card"><div class="card-h"><h3>Últimas movimentações</h3><button class="btn btn-sm" data-act="go" data-r="extrato">Ver extrato completo</button></div>
+      ${last.map(i => `<div class="list-row" data-act="go" data-r="extrato"><span class="alert-i ${i.k === 'in' ? 'info' : 'bad'}" style="${i.k === 'in' ? 'background:var(--ok-bg);color:var(--ok)' : ''}">${ic(i.k === 'in' ? 'plus' : 'wallet', 16)}</span><div class="grow"><b>${esc(i.desc.length > 46 ? i.desc.slice(0, 46) + '…' : i.desc)}</b><small>${fmtDate(i.date)} · ${esc(i.cat)}${i.who !== '—' ? ' · ' + esc(i.who.split(' ')[0]) : ''}</small></div><b style="color:${i.k === 'in' ? 'var(--ok)' : 'var(--bad)'}">${i.k === 'in' ? '+' : '−'} ${brl(i.valor)}</b></div>`).join('')}</div>
     <div class="card"><div class="card-h"><h3>Atenção</h3></div>
       ${alerts.length ? alerts.map(a => `<div class="list-row" data-act="goAlert" data-r="${a[4]}"><span class="alert-i ${a[0]}">${ic(a[1], 18)}</span><div class="grow"><b>${esc(a[2])}</b><small>${esc(a[3])}</small></div>${ic('right', 16)}</div>`).join('') : empty('Tudo em dia.')}</div>
   </div>`;
@@ -69,96 +72,15 @@ VIEWS.dashboard = () => {
 ACT.dashRange = el => { UI.dashRange = +el.dataset.n; render(); };
 ACT.goAlert = el => { const [r, f] = el.dataset.r.split(':'); if (f) { UI.cliFilter = f; UI.cliLimit = 50; } go(r); };
 
-/* ================= FILA DE ATENDIMENTO ================= */
-const queueToday = () => {
-  const t = apptsOn(TODAY);
-  return { wait: t.filter(a => a.status === 'aguardando').sort((a, b) => a.time.localeCompare(b.time)), live: t.filter(a => a.status === 'andamento'), done: t.filter(a => a.status === 'concluido').sort((a, b) => b.time.localeCompare(a.time)) };
-};
-const chairCard = (b, q) => {
-  const a = q.live.find(x => x.barberId === b.id);
-  if (!a) return `<div class="chair">${'<div class="who-cell">' + avatar(b, 38) + '<div><b>' + esc(b.nome) + '</b><br><span class="badge ok">Livre</span></div></div>'}<p class="muted" style="font-size:13px">Cadeira disponível.</p><button class="btn btn-sm btn-brass" data-act="callNext" data-id="${b.id}">Chamar próximo</button></div>`;
-  const el = Math.max(0, nowMin() - toMin(a.time)), c = client(a.clientId);
-  return `<div class="chair busy"><div class="who-cell">${avatar(b, 38)}<div><b>${esc(b.nome)}</b><br><span class="badge brass">Atendendo</span></div></div>
-    <div><b>${esc(c?.nome || 'Cliente avulso')}</b><div class="muted" style="font-size:13px">${esc(apptSvcNames(a))}</div></div>
-    <div><div class="hbar-top"><span class="muted">${el} min em atendimento</span><span class="muted">previsto ${a.dur} min</span></div><div class="progress"><div style="width:${Math.min(100, el / a.dur * 100)}%"></div></div></div>
-    <button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Finalizar e cobrar</button></div>`;
-};
-VIEWS.fila = () => {
-  const q = queueToday(), all = visibleBarbers(), active = DB.barbers.filter(b => b.ativo);
-  const free = active.filter(b => !q.live.some(a => a.barberId === b.id)).length;
-  const esp = q.wait.length ? Math.ceil(sum(q.wait, a => a.dur) / Math.max(1, active.length)) : 0;
-  return `
-  <div class="page-h"><div><h1>Fila de atendimento</h1><p>Ordem de chegada, sem hora marcada · ${cap(fmtLong(TODAY))}</p></div>
-    <div class="acts"><button class="btn btn-primary" data-act="newQueue">${ic('plus', 16)} Colocar na fila</button></div></div>
-  <div class="grid g4 keep2"><div class="card kpi"><small>Na fila</small><b>${q.wait.length}</b><div class="sub">cliente(s) aguardando</div></div>
-    <div class="card kpi"><small>Espera estimada</small><b>${esp} <span class="muted" style="font-size:18px;font-weight:500">min</span></b><div class="sub">para quem chegar agora</div></div>
-    <div class="card kpi"><small>Cadeiras</small><b>${active.length - free} <span class="muted" style="font-size:18px;font-weight:500">/ ${active.length}</span></b><div class="sub">${free} livre(s)</div></div>
-    <div class="card kpi"><small>Atendidos hoje</small><b>${q.done.length}</b><div class="sub">${brl0(sum(q.done, apptValue))} em serviços</div></div></div>
-  <div class="grid g-main mt">
-    <div class="card"><div class="card-h"><h3>Cadeiras</h3></div><div class="card-b"><div class="chairs">${all.map(b => chairCard(b, q)).join('')}</div></div></div>
-    <div class="card"><div class="card-h"><h3>Fila de espera</h3><span class="muted">${q.wait.length} aguardando</span></div>
-      ${q.wait.length ? q.wait.map((a, i) => { const b = a.barberId && barber(a.barberId), c = client(a.clientId); return `<div class="list-row" data-act="qItem" data-id="${a.id}"><span class="pos">${i + 1}</span><div class="grow"><b>${esc(c?.nome || 'Cliente avulso')}</b><small>${esc(apptSvcNames(a))} · ${b ? 'prefere ' + esc(b.nome.split(' ')[0]) : 'qualquer barbeiro'}</small></div><span class="muted nowrap">${Math.max(0, nowMin() - toMin(a.time))} min</span></div>`; }).join('') : empty('Ninguém aguardando. Clique em "Colocar na fila" quando um cliente chegar.')}</div>
-  </div>
-  <div class="card mt"><div class="card-h"><h3>Atendidos hoje</h3></div>${q.done.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Chegada</th><th>Cliente</th><th>Serviços</th><th>Barbeiro</th><th class="num">Valor</th></tr></thead><tbody>
-    ${q.done.map(a => `<tr data-act="sale" data-id="${a.saleId}"><td>${a.time}</td><td>${esc(client(a.clientId)?.nome || 'Cliente avulso')}</td><td class="muted">${esc(apptSvcNames(a))}</td><td>${esc(barber(a.barberId).nome.split(' ')[0])}</td><td class="num"><b>${brl(apptValue(a))}</b></td></tr>`).join('')}</tbody></table></div>` : empty('Nenhum atendimento concluído ainda.')}</div>`;
-};
-ACT.newQueue = () => queueForm({});
-function queueForm(a) {
-  const edit = !!a.id, bs = DB.barbers.filter(b => b.ativo), cl = a.clientId ? client(a.clientId) : null, svcSel = new Set(a.svc || []);
-  openModal({
-    title: edit ? 'Editar item da fila' : 'Colocar na fila', wide: true,
-    body: `<form id="f-q" class="form-grid" onsubmit="return false">
-      ${fld('Cliente', clientPicker('cliente', cl ? cl.nome + ' · ' + cl.tel : ''), 'full')}
-      ${fld('Telefone (só para cliente novo)', inp('tel', '', 'tel', 'placeholder="(11) 90000-0000"'))}
-      ${fld('Barbeiro de preferência', sel('barberId', [['', 'Qualquer um'], ...bs.map(b => [b.id, b.nome])], a.barberId || ''))}
-      <div class="full"><span class="muted" style="font-size:13px;font-weight:500">Serviços</span><div class="svc-pick" style="margin-top:6px">${DB.services.filter(s => s.ativo || svcSel.has(s.id)).map(s => `<label class="svc-opt"><input type="checkbox" name="svc" value="${s.id}" ${svcSel.has(s.id) ? 'checked' : ''}><span class="grow">${esc(s.nome)}<small>${s.dur} min</small></span><b>${brl0(s.preco)}</b></label>`).join('')}</div></div>
-      ${fld('Observações', `<textarea name="obs" rows="2" placeholder="Ex.: vai com o filho, tem pressa…">${esc(a.obs || '')}</textarea>`, 'full')}
-      <div class="full" id="q-err" style="color:var(--bad);font-weight:500"></div></form>`,
-    foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="queueSave" data-id="${a.id || ''}">${edit ? 'Salvar' : 'Entrar na fila'}</button>`
-  });
-}
-ACT.queueSave = el => {
-  const f = $('#f-q'), d = formData(f), svc = $$('[name=svc]:checked', f).map(i => +i.value), id = +el.dataset.id || null;
-  if (!d.cliente.trim()) return $('#q-err').textContent = 'Informe o cliente.';
-  if (!svc.length) return $('#q-err').textContent = 'Escolha pelo menos um serviço.';
-  const v = { clientId: resolveClient(d.cliente, d.tel), barberId: d.barberId ? +d.barberId : null, svc, dur: sum(svc, sid => service(sid).dur), obs: d.obs };
-  if (id) Object.assign(M.appts.get(id), v); else DB.appts.push({ id: nextId(), date: TODAY, time: toTime(nowMin()), status: 'aguardando', saleId: null, ...v });
-  save(); closeModal(); toast(id ? 'Fila atualizada' : 'Cliente na fila'); render();
-};
-const callTo = (a, bid) => {
-  if (apptsOn(TODAY).some(x => x.status === 'andamento' && x.barberId === bid)) return toast(barber(bid).nome.split(' ')[0] + ' está ocupado com outro cliente', 'bad');
-  a.barberId = bid; a.status = 'andamento'; save(); closeModal(); toast(`${client(a.clientId)?.nome.split(' ')[0] || 'Cliente'} chamado para a cadeira de ${barber(bid).nome.split(' ')[0]}`); render();
-};
-ACT.callNext = el => {
-  const bid = +el.dataset.id, q = queueToday(), a = q.wait.find(x => x.barberId === bid) || q.wait.find(x => !x.barberId) || q.wait[0];
-  if (!a) return toast('Ninguém aguardando na fila', 'bad'); callTo(a, bid);
-};
-ACT.qItem = el => {
-  const a = M.appts.get(+el.dataset.id); if (!a) return; const c = client(a.clientId), live = a.status === 'andamento';
-  const busy = new Set(apptsOn(TODAY).filter(x => x.status === 'andamento').map(x => x.barberId));
-  const msg = fillMsg(DB.cfg.msgVez, { nome: (c?.nome || '').split(' ')[0], barbearia: DB.cfg.nome, barbeiro: (a.barberId ? barber(a.barberId) : DB.barbers[0]).nome.split(' ')[0] });
-  openModal({
-    title: esc(c?.nome || 'Cliente avulso'), body: `<div class="who-cell" style="gap:10px">${badge(STATUS[a.status].l, live ? 'brass' : 'info')}<span class="muted">chegou às ${a.time} · ${c?.tel ? esc(c.tel) : 'sem telefone'}</span></div>
-    <dl class="kv"><dt>Serviços</dt><dd>${esc(apptSvcNames(a))}</dd><dt>Valor previsto</dt><dd>${brl(apptValue(a))}</dd><dt>Duração prevista</dt><dd>${a.dur} min</dd>${a.barberId ? `<dt>Barbeiro</dt><dd>${esc(barber(a.barberId).nome)}</dd>` : ''}${a.obs ? `<dt>Observação</dt><dd>${esc(a.obs)}</dd>` : ''}${c?.obs ? `<dt>Ficha do cliente</dt><dd>${esc(c.obs)}</dd>` : ''}</dl>
-    ${!live ? `<div class="form-grid">${fld('Chamar para a cadeira de', sel('qb', DB.barbers.filter(b => b.ativo).map(b => [b.id, b.nome + (busy.has(b.id) ? ' (ocupado)' : '')]), a.barberId || (DB.barbers.find(b => b.ativo && !busy.has(b.id)) || DB.barbers[0]).id, 'id="q-barber"'), 'full')}</div>` : ''}`,
-    foot: `<button class="btn btn-danger btn-sm spacer" data-act="queueLeave" data-id="${a.id}">Desistiu</button>${c?.tel && !live ? `<a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="${wa(c.tel, msg)}">${ic('chat', 15)} Avisar</a>` : ''}<button class="btn btn-sm" data-act="queueEdit" data-id="${a.id}">${ic('edit', 15)} Editar</button>
-    ${live ? `<button class="btn btn-sm btn-primary" data-act="apptPay" data-id="${a.id}">Finalizar e cobrar</button>` : `<button class="btn btn-sm btn-brass" data-act="queueCall" data-id="${a.id}">Chamar para a cadeira</button>`}`
-  });
-};
-ACT.queueCall = el => callTo(M.appts.get(+el.dataset.id), +$('#q-barber').value);
-ACT.queueEdit = el => queueForm(M.appts.get(+el.dataset.id));
-ACT.queueLeave = el => confirmBox('Tirar este cliente da fila (desistiu)?', () => { M.appts.get(+el.dataset.id).status = 'desistiu'; save(); toast('Cliente removido da fila'); render(); }, 'Tirar da fila', true);
-ACT.apptPay = el => checkout({ apptId: +el.dataset.id });
-
 /* ================= CAIXA ================= */
 VIEWS.caixa = () => {
   const d = UI.cxDate, sales = salesOn(d).slice().sort((a, b) => b.time.localeCompare(a.time));
   const cs = sales.map(calcSale), total = sum(cs, c => c.total), tips = sum(sales, s => s.tip || 0);
   const por = { pix: 0, credito: 0, debito: 0, dinheiro: 0 }; sales.forEach((s, i) => por[s.pag] += cs[i].total);
-  const aCobrar = d === TODAY ? apptsOn(d).filter(a => a.status === 'andamento').sort((a, b) => a.time.localeCompare(b.time)) : [];
+  const aCobrar = false ? apptsOn(d).filter(a => a.status === 'andamento').sort((a, b) => a.time.localeCompare(b.time)) : [];
   return `
-  <div class="page-h"><div><h1>Caixa</h1><p>Vendas, recebimentos e fechamento do dia</p></div>
-    <div class="acts"><button class="btn no-print" onclick="window.print()">${ic('print', 16)} Imprimir fechamento</button><button class="btn btn-primary no-print" data-act="newSale">${ic('plus', 16)} Nova venda</button></div></div>
+  <div class="page-h"><div><h1>Caixa</h1><p>Lance cada atendimento e venda, confira recebimentos e feche o dia</p></div>
+    <div class="acts"><button class="btn no-print" onclick="window.print()">${ic('print', 16)} Imprimir fechamento</button><button class="btn btn-primary no-print" data-act="newSale">${ic('plus', 16)} Lançar atendimento</button></div></div>
   <div class="toolbar no-print"><div class="datenav"><button class="icon-btn" data-act="cxNav" data-n="-1" aria-label="Dia anterior">${ic('left')}</button><span class="datenav-l">${d === TODAY ? 'Hoje' : fmtDate(d, { weekday: 'short', day: '2-digit', month: 'short' })}</span><button class="icon-btn" data-act="cxNav" data-n="1" aria-label="Próximo dia">${ic('right')}</button></div>
     <input type="date" value="${d}" data-change="cxDate" style="width:auto" aria-label="Data"></div>
   <div class="grid g4 keep2"><div class="card kpi"><small>Total vendido</small><b>${brl(total)}</b><div class="sub">${sales.length} venda(s)</div></div>
@@ -192,12 +114,12 @@ CHG.cxDate = el => { if (el.value) { UI.cxDate = el.value; render(); } };
 ACT.newSale = () => checkout({});
 
 let CK = null;
-function checkout({ apptId }) {
+function checkout({ apptId, clientId }) {
   const a = apptId ? M.appts.get(apptId) : null;
   CK = { apptId, items: a ? a.svc.map(id => { const s = service(id); return { t: 's', id, nome: s.nome, qtd: 1, preco: s.preco }; }) : [] };
-  const bs = DB.barbers.filter(b => b.ativo), c = a && client(a.clientId);
+  const bs = DB.barbers.filter(b => b.ativo), c = a ? client(a.clientId) : clientId ? client(clientId) : null;
   openModal({
-    title: a ? 'Finalizar e cobrar' : 'Nova venda', wide: true,
+    title: a ? 'Finalizar e cobrar' : 'Lançar atendimento', wide: true,
     body: `<form id="f-ck" class="form-grid" onsubmit="return false">
       ${fld('Cliente', clientPicker('cliente', c ? c.nome + ' · ' + c.tel : ''))}${fld('Barbeiro', sel('barberId', bs.map(b => [b.id, b.nome]), a ? a.barberId : (SESSION.role === 'barbeiro' ? SESSION.me : bs[0].id)))}
       <div class="full"><div class="form-grid">
