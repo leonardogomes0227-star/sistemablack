@@ -358,3 +358,51 @@ table.t{width:100%;border-collapse:collapse}
 }
 .who-cell b{white-space:nowrap}
 .nav a{padding:6px 12px}.nav-g{padding-top:12px}
+
+/* ===== celular: barra de atalhos, tabelas em cartões, toques maiores ===== */
+.tabbar{display:none}
+@media(max-width:860px){
+  .main{padding-bottom:96px}
+  .tabbar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--side);border-top:1px solid #2a2a2f;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  .tabbar a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:#9a9aa2;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none;-webkit-tap-highlight-color:transparent}
+  .tabbar a.on{color:#fff;background:#25252a}.tabbar a.on .ic{color:#e0b055}
+  .topbar{padding-top:calc(8px + env(safe-area-inset-top))}
+  .side{padding-bottom:env(safe-area-inset-bottom)}
+  .btn{height:44px}.btn-sm{height:36px;padding:0 12px}
+  .icon-btn{width:42px;height:42px}
+  .chip{height:38px;padding:0 14px}
+  input,select,textarea{font-size:16px!important}
+  input[type=text],input[type=number],input[type=date],input[type=time],input[type=tel],input[type=email],input[type=password],input:not([type]),select{height:46px}
+  .demo-tag{display:none}
+  .page-h{align-items:flex-start}
+  .page-h h1{font-size:30px}
+  .page-h .acts{width:100%}.page-h .acts>.btn{flex:1}.page-h .acts .datenav{flex:1 1 100%;justify-content:space-between}
+  .datenav-l{flex:1}
+  .toolbar select{width:100%!important;margin-left:0!important}
+  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-right:-14px;padding-right:14px;-webkit-overflow-scrolling:touch}
+  .chips::-webkit-scrollbar{display:none}.chip{flex:none}
+  .card-h{padding:14px 16px}.card-b{padding:16px}
+  .list-row{padding:12px 16px}
+  .kpi{padding:14px 16px}.kpi b{font-size:30px}
+  .eq-b{padding:16px}
+  #toasts{right:16px;left:16px;bottom:88px}
+}
+@media(max-width:640px){
+  .tbl-wrap{overflow:visible}
+  table.t,.t tbody,.t tfoot,.t tr,.t td{display:block}
+  .t thead{display:none}
+  .t tbody tr,.t tfoot tr{padding:12px 16px;border-bottom:1px solid var(--line)}
+  .t tbody tr:last-child{border-bottom:0}
+  .t td,.t tbody tr:nth-child(even) td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:4px 0;border:0;background:none;text-align:right}
+  .t tbody tr[data-act]:hover td{background:none}
+  .t td::before{content:attr(data-label);color:var(--ink-3);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:left;flex:none}
+  .t td:first-child{justify-content:flex-start;font-size:15px;padding-bottom:6px;text-align:left}
+  .t td:first-child::before,.t td[data-label=""]::before{display:none}
+  .t td[data-label=""]{justify-content:flex-end}
+  .t td:first-child[data-label=""]{justify-content:flex-start}
+  .t td:empty,.t td.hm{display:none!important}
+  .t td .progress{min-width:130px;flex:1}
+  .t td.num{white-space:normal}
+  .t tfoot tr{background:var(--surface-2)}.t tfoot td{background:none;border:0}
+  .t td .btn{height:36px}
+}
