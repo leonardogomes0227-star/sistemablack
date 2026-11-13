@@ -4,18 +4,12 @@ Sistema de **gerenciamento**: o dono vê tudo que entra e sai e quanto cada barb
 
 Abra `index.html` ou publique a pasta em qualquer hospedagem estática.
 
-## Visão do dono
-- **Painel**: entrou hoje, entradas/saídas/lucro do mês, **quanto cada barbeiro fez** (hoje, 7 dias, mês, ticket, comissão, meta), para onde vai o dinheiro, últimas movimentações e alertas.
-- **Extrato**: todas as entradas e saídas (atendimentos, despesas, vales, comissões pagas) com saldo, filtros por período, tipo e barbeiro, e exportação em CSV.
-- **Financeiro**: resultado do mês, lucro líquido, formas de pagamento, despesas por categoria, contas a pagar.
-- **Relatórios**: mais vendidos, horários de pico, retorno de clientes, descontos, desempenho por barbeiro.
+## Menu por destino
+- **Hoje**: *Painel* (resumo do mês em uma conta: entrou − saiu = sobrou, equipe e avisos) e *Caixa* (lançar atendimentos, gaveta, fechamento).
+- **Dinheiro**: *Entradas e saídas* (extrato), *Gastos e contas* (contas a pagar, atrasos, categorias), *Lucro do mês* (resultado, margem, ponto de equilíbrio) e *Relatórios*.
+- **Equipe**: *Produção* (ranking e números por barbeiro), *Comissões* (fechar e pagar) e *Cadastro e regras*.
+- **Clientes**: *Clientes* e *Trazer de volta* (aniversariantes, sumidos e brindes do cartão fidelidade, com WhatsApp pronto).
+- **Produtos e preços**: *Serviços e preços* e *Estoque* (lista de compras sugerida, dinheiro parado, margem).
+- **Sistema**: *Configurações*.
 
-## Operação
-- **Caixa**: lançar cada atendimento/venda (serviços + produtos, desconto, gorjeta, forma de pagamento), estorno, fechamento do dia e gaveta de dinheiro (troco, sangria, suprimento, conferência).
-- **Clientes**: histórico, preferências, cartão fidelidade, aniversariantes, sumidos.
-- **Serviços e produtos**: preços, margem, estoque mínimo, entrada de estoque.
-
-## Equipe
-- **Barbeiros e Comissões**: % por serviço/produto ou aluguel de cadeira, vales, gorjetas, fechamento mensal, pagamento e recibo.
-
-Perfis de acesso: Dono (tudo), Recepção (caixa, clientes, catálogo) e Barbeiro (só o próprio extrato de comissão).
+Perfis de acesso: Dono (tudo), Recepção (caixa, clientes, serviços e estoque) e Barbeiro (só o próprio extrato de comissão).

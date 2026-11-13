@@ -1,29 +1,27 @@
 'use strict';
-const UI = { route: 'dashboard', dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', exPeriod: 'mes', exTipo: 'todas', exBarber: '', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, relRange: 'mes', finFilter: 'todas' };
+const UI = { route: 'dashboard', dashRange: 30, cxDate: TODAY, cliFilter: 'todos', cliQ: '', cliLimit: 50, cliSort: 'nome', exPeriod: 'mes', exTipo: 'todas', exBarber: '', catTab: 'servicos', finMonth: ym(TODAY), comMonth: ym(TODAY), comBarber: null, prodMonth: ym(TODAY), gasMonth: ym(TODAY), gasFilter: 'todas', gasCat: '', estQ: '', relRange: 'mes', finFilter: 'todas' };
 const ACT = {}; const CHG = {}; const VIEWS = {};
 let SESSION = null;
 const isDono = () => SESSION.role === 'dono';
 const visibleBarbers = () => DB.barbers.filter(b => b.ativo && (SESSION.role !== 'barbeiro' || b.id === SESSION.me));
 
-/* ================= PAINEL DO DONO ================= */
+/* ================= PAINEL: só o resumo; cada bloco leva ao seu destino ================= */
+const rangeTotal = (a, b, bid) => sum(DB.sales.filter(s => s.date >= a && s.date <= b && (!bid || s.barberId === bid)), s => calcSale(s).total);
+const openDaysIn = m => { let n = 0; const [y, mo] = m.split('-').map(Number); const last = new Date(y, mo, 0).getDate(); for (let i = 1; i <= last; i++) if (DB.cfg.dias.includes(new Date(y, mo - 1, i).getDay())) n++; return n; };
+const openDaysElapsed = m => { let n = 0; for (let i = 1; i <= +TODAY.slice(8); i++) if (DB.cfg.dias.includes(new Date(+m.slice(0, 4), +m.slice(5) - 1, i).getDay())) n++; return n; };
+const seeAll = (r, label) => `<button class="link-btn" data-act="go" data-r="${r}">${label} ${ic('right', 14)}</button>`;
 VIEWS.dashboard = () => {
   const m = ym(TODAY), pm = addMonths(m, -1), day = +TODAY.slice(8);
-  const rng = (a, b, bid) => sum(DB.sales.filter(s => s.date >= a && s.date <= b && (!bid || s.barberId === bid)), s => calcSale(s).total);
-  const hoje = rng(TODAY, TODAY), semPas = rng(addDays(TODAY, -7), addDays(TODAY, -7));
-  const ms = monthStats(m), pms = monthStats(pm);
-  const mesPas = rng(pm + '-01', pm + '-' + pad(Math.min(day, 28)));
+  const hoje = rangeTotal(TODAY, TODAY), semPas = rangeTotal(addDays(TODAY, -7), addDays(TODAY, -7));
+  const ms = monthStats(m);
+  const mesPas = rangeTotal(pm + '-01', pm + '-' + pad(Math.min(day, 28)));
   const base = ms.bruta + ms.aluguel, saidas = ms.despesas + ms.comiss + ms.taxas;
-  const openDays = d => { let n = 0; const [y, mo] = d.split('-').map(Number); const last = new Date(y, mo, 0).getDate(); for (let i = 1; i <= last; i++) if (DB.cfg.dias.includes(new Date(y, mo - 1, i).getDay())) n++; return n; };
-  const elapsed = (() => { let n = 0; for (let i = 1; i <= day; i++) if (DB.cfg.dias.includes(new Date(+m.slice(0, 4), +m.slice(5) - 1, i).getDay())) n++; return n; })();
-  const proj = elapsed ? ms.bruta / elapsed * openDays(m) : 0, meta = DB.cfg.metaMes;
-  const days = []; for (let i = UI.dashRange - 1; i >= 0; i--) { const d = addDays(TODAY, -i); const v = rng(d, d); days.push({ v, l: fmtDate(d), hl: d === TODAY, t: `${fmtDate(d)} · ${brl(v)}` }); }
-
-  const rows = DB.barbers.map(b => ({ b, st: stmt(b.id, m), h: rng(TODAY, TODAY, b.id), w: rng(addDays(TODAY, -6), TODAY, b.id) })).filter(r => r.b.ativo || r.st.n).sort((a, b) => b.st.fat - a.st.fat);
-  const T = k => sum(rows, r => r.st[k]);
-
+  const elapsed = openDaysElapsed(m), proj = elapsed ? ms.bruta / elapsed * openDaysIn(m) : 0, meta = DB.cfg.metaMes;
+  const days = []; for (let i = UI.dashRange - 1; i >= 0; i--) { const d = addDays(TODAY, -i); const v = rangeTotal(d, d); days.push({ v, l: fmtDate(d), hl: d === TODAY, t: `${fmtDate(d)} · ${brl(v)}` }); }
+  const rows = DB.barbers.map(b => ({ b, st: stmt(b.id, m), h: rangeTotal(TODAY, TODAY, b.id) })).filter(r => r.b.ativo || r.st.n).sort((a, b) => b.st.fat - a.st.fat);
+  const topMax = Math.max(...rows.map(r => r.st.fat), 1);
   const cats = {}; ms.exps.filter(e => e.pago || e.date <= TODAY).forEach(e => cats[e.categoria] = (cats[e.categoria] || 0) + e.valor);
   const flows = [['Comissões dos barbeiros', ms.comiss, 'var(--ink)'], ...Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => [k, v, 'var(--brass)']), ['Taxas de cartão', ms.taxas, '#8a8a92']];
-
   const baixo = DB.products.filter(p => p.ativo && p.estoque <= p.min);
   const venc = DB.expenses.filter(e => !e.pago && e.date >= TODAY && e.date <= addDays(TODAY, 7));
   const atraso = DB.expenses.filter(e => !e.pago && e.date < TODAY);
@@ -31,42 +29,41 @@ VIEWS.dashboard = () => {
   const sumidos = DB.clients.filter(c => cliStats(c).tag === 'Sumido').length;
   const comPend = sum(DB.barbers.filter(b => !DB.payouts[b.id + '_' + pm]), b => Math.max(0, stmt(b.id, pm).net));
   const alerts = [];
-  if (atraso.length) alerts.push(['bad', 'alert', `${atraso.length} conta(s) em atraso`, brl(sum(atraso, e => e.valor)) + ' · ' + atraso.map(e => e.descricao).join(', '), 'financeiro']);
-  if (venc.length) alerts.push(['warn', 'clock', `${venc.length} conta(s) vencem em 7 dias`, brl(sum(venc, e => e.valor)), 'extrato']);
-  if (comPend > 0) alerts.push(['brass', 'percent', 'Comissões de ' + mLabel(pm) + ' em aberto', brl(comPend) + ' a pagar aos barbeiros', 'comissoes']);
-  if (baixo.length) alerts.push(['warn', 'box', `${baixo.length} produto(s) com estoque baixo`, baixo.map(p => `${p.nome} (${p.estoque})`).join(', '), 'catalogo']);
-  if (anivs.length) alerts.push(['info', 'cake', `${anivs.length} cliente(s) fazem aniversário em 7 dias`, anivs.slice(0, 3).map(c => c.nome.split(' ')[0]).join(', ') + (anivs.length > 3 ? '…' : ''), 'clientes:aniversario']);
-  if (sumidos) alerts.push(['info', 'users', `${sumidos} clientes sem voltar há mais de 45 dias`, 'Vale chamar no WhatsApp', 'clientes:sumido']);
-  const last = ledger(addDays(TODAY, -30), TODAY).slice(0, 8);
+  if (atraso.length) alerts.push(['bad', 'alert', `${atraso.length} conta(s) em atraso`, brl(sum(atraso, e => e.valor)) + ' · ' + atraso.map(e => e.descricao).join(', '), 'gastos', 'Gastos']);
+  if (venc.length) alerts.push(['warn', 'clock', `${venc.length} conta(s) vencem em 7 dias`, brl(sum(venc, e => e.valor)), 'gastos', 'Gastos']);
+  if (comPend > 0) alerts.push(['brass', 'percent', 'Comissões de ' + mLabel(pm) + ' em aberto', brl(comPend) + ' a pagar aos barbeiros', 'comissoes', 'Equipe']);
+  if (baixo.length) alerts.push(['warn', 'box', `${baixo.length} produto(s) com estoque baixo`, baixo.map(p => `${p.nome} (${p.estoque})`).join(', '), 'estoque', 'Estoque']);
+  if (anivs.length) alerts.push(['info', 'cake', `${anivs.length} cliente(s) fazem aniversário em 7 dias`, anivs.slice(0, 3).map(c => c.nome.split(' ')[0]).join(', ') + (anivs.length > 3 ? '…' : ''), 'retorno', 'Clientes']);
+  if (sumidos) alerts.push(['info', 'users', `${sumidos} clientes sem voltar há mais de 45 dias`, 'Vale chamar no WhatsApp', 'retorno', 'Clientes']);
   const hr = new Date().getHours(); const saud = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
+  const mn = MESES[+m.slice(5) - 1];
   return `
   <section class="hero"><span class="pole" aria-hidden="true"></span>
     <div><span class="hero-eyebrow">${cap(fmtLong(TODAY))}</span><h1>${saud}</h1>
       <div class="hero-acts"><button class="btn btn-brass" data-act="newSale">${ic('plus', 16)} Lançar atendimento</button><button class="btn btn-ghost-d" data-act="expNew">${ic('wallet', 16)} Lançar despesa</button></div></div>
     <div class="hero-n"><small>Entrou hoje</small><b>${brl(hoje)}</b><div class="kpi-line">${delta(hoje, semPas)}<span>vs. mesmo dia da semana passada</span></div></div>
   </section>
-  <div class="grid g4 keep2 mt">
-    <div class="card kpi"><small>Entradas do mês</small><b>${brl0(base)}</b><div class="kpi-line">${delta(ms.bruta, mesPas)}<span class="sub">vs. ${MESES[+pm.slice(5) - 1].toLowerCase()} até hoje</span></div></div>
-    <div class="card kpi"><small>Saídas do mês</small><b>${brl0(saidas)}</b><div class="sub">comissões + despesas + taxas</div></div>
-    <div class="card kpi" style="border-color:var(--brass)"><small>Lucro do mês</small><b style="color:${ms.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl0(ms.lucro)}</b><div class="sub">Margem de ${ms.margem.toFixed(0)}%</div></div>
-    <div class="card kpi"><small>Ticket médio</small><b>${brl(ms.ticket)}</b><div class="sub">${ms.n} atendimentos no mês</div></div>
+
+  <div class="sec-h"><h2>${mn} em uma conta</h2><span class="muted">Clique em cada bloco para abrir os detalhes</span></div>
+  <div class="eq">
+    <button class="eq-b in" data-act="go" data-r="extrato"><span class="eq-i">${ic('arrowIn', 18)}</span><small>Entrou</small><b>${brl0(base)}</b><em>${delta(ms.bruta, mesPas) || ''} <span>vs. ${MESES[+pm.slice(5) - 1].slice(0, 3).toLowerCase()} até hoje</span></em><span class="eq-go">Ver entradas e saídas ${ic('right', 13)}</span></button>
+    <span class="eq-op" aria-hidden="true">−</span>
+    <button class="eq-b out" data-act="go" data-r="gastos"><span class="eq-i">${ic('arrowOut', 18)}</span><small>Saiu</small><b>${brl0(saidas)}</b><em><span>comissões + despesas + taxas</span></em><span class="eq-go">Ver gastos e contas ${ic('right', 13)}</span></button>
+    <span class="eq-op" aria-hidden="true">=</span>
+    <button class="eq-b net" data-act="go" data-r="financeiro"><span class="eq-i">${ic('trend', 18)}</span><small>Sobrou (lucro)</small><b style="color:${ms.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl0(ms.lucro)}</b><em><span>margem de ${ms.margem.toFixed(0)}%</span></em><span class="eq-go">Ver lucro do mês ${ic('right', 13)}</span></button>
   </div>
-  <div class="card mt"><div class="card-h"><h3>Quanto cada barbeiro fez</h3><span class="muted">Valor dos atendimentos e produtos, já com desconto</span></div>
-    <div class="tbl-wrap"><table class="t"><thead><tr><th>Barbeiro</th><th class="num">Hoje</th><th class="num">7 dias</th><th class="num">${MESES[+m.slice(5) - 1]}</th><th class="num">Atend.</th><th class="num">Ticket</th><th class="num">Comissão</th><th class="num">Gorjetas</th><th style="min-width:150px">Meta do mês</th></tr></thead><tbody>
-    ${rows.map(r => `<tr data-act="barStmt" data-id="${r.b.id}"><td><span class="who-cell">${avatar(r.b, 28)}<b>${esc(r.b.nome)}</b></span></td><td class="num">${brl(r.h)}</td><td class="num">${brl(r.w)}</td><td class="num"><b>${brl(r.st.fat)}</b></td><td class="num">${r.st.n}</td><td class="num">${brl(r.st.n ? r.st.fat / r.st.n : 0)}</td><td class="num">${brl(r.st.com)}</td><td class="num">${brl(r.st.tips)}</td><td><div class="progress"><div style="width:${Math.min(100, r.st.fat / r.b.meta * 100)}%"></div></div><span class="muted" style="font-size:12px">${(r.st.fat / r.b.meta * 100).toFixed(0)}% de ${brl0(r.b.meta)}</span></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total da equipe</td><td class="num">${brl(sum(rows, r => r.h))}</td><td class="num">${brl(sum(rows, r => r.w))}</td><td class="num">${brl(T('fat'))}</td><td class="num">${T('n')}</td><td class="num">${brl(T('n') ? T('fat') / T('n') : 0)}</td><td class="num">${brl(T('com'))}</td><td class="num">${brl(T('tips'))}</td><td></td></tr></tfoot></table></div>
-    <div style="padding:14px 20px;border-top:1px solid var(--line)"><div class="hbar-top"><span>Meta da barbearia</span><b>${brl0(ms.bruta)} de ${brl0(meta)}</b></div><div class="progress"><div style="width:${Math.min(100, ms.bruta / meta * 100)}%"></div></div><div class="muted" style="font-size:12.5px;margin-top:6px">Projeção para o fim do mês: <b style="color:var(--ink)">${brl0(proj)}</b> (${(proj / meta * 100).toFixed(0)}% da meta)</div></div></div>
-  <div class="grid g-main mt">
-    <div class="card"><div class="card-h"><h3>Entradas por dia</h3><div class="chips">${[15, 30, 60].map(n => `<button class="chip ${UI.dashRange === n ? 'on' : ''}" data-act="dashRange" data-n="${n}">${n} dias</button>`).join('')}</div></div><div class="card-b">${bars(days, { every: Math.ceil(UI.dashRange / 6) })}</div></div>
-    <div class="card"><div class="card-h"><h3>Para onde vai o dinheiro</h3><span class="muted">${MESES[+m.slice(5) - 1]}</span></div><div class="card-b">
-      ${flows.map(f => hbar(esc(f[0]), f[1], Math.max(base, 1), `${brl0(f[1])} <span class="muted" style="font-weight:400">· ${base ? (f[1] / base * 100).toFixed(0) : 0}%</span>`, f[2])).join('')}
-      <div class="kv" style="margin-top:14px"><dt class="tot">Sobra (lucro)</dt><dd class="tot" style="color:${ms.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl0(ms.lucro)}</dd></div></div></div>
+  <div class="card meta-bar"><div class="hbar-top"><span><b>Meta da barbearia</b> · ${ms.n} atendimentos · ticket médio ${brl(ms.ticket)}</span><b>${brl0(ms.bruta)} de ${brl0(meta)}</b></div><div class="progress"><div style="width:${Math.min(100, ms.bruta / meta * 100)}%"></div></div><div class="muted" style="font-size:12.5px;margin-top:6px">Se o ritmo continuar, o mês fecha em <b style="color:var(--ink)">${brl0(proj)}</b> (${(proj / meta * 100).toFixed(0)}% da meta)</div></div>
+
+  <div class="grid g-split mt">
+    <div class="card"><div class="card-h"><h3>${ic('trophy', 15)} Equipe · quem produziu em ${mn.toLowerCase()}</h3>${seeAll('producao', 'Ver produção completa')}</div>
+      <div class="card-b rank">${rows.map((r, i) => `<div class="rank-row" data-act="barStmt" data-id="${r.b.id}"><span class="rank-n">${i + 1}</span>${avatar(r.b, 34)}<div class="grow"><div class="hbar-top"><b>${esc(r.b.nome)}</b><b>${brl0(r.st.fat)}</b></div><div class="hbar-track"><div style="width:${r.st.fat / topMax * 100}%;background:${r.b.cor}"></div></div><small class="muted">${r.st.n} atend. · hoje ${brl0(r.h)} · meta ${(r.st.fat / r.b.meta * 100).toFixed(0)}%</small></div></div>`).join('')}</div></div>
+    <div class="card"><div class="card-h"><h3>${ic('alert', 15)} Precisa de atenção</h3><span class="muted">${alerts.length} aviso(s)</span></div>
+      ${alerts.length ? alerts.map(a => `<div class="list-row" data-act="go" data-r="${a[4]}"><span class="alert-i ${a[0]}">${ic(a[1], 18)}</span><div class="grow"><b>${esc(a[2])}</b><small>${esc(a[3])}</small></div><span class="dest">${a[5]}</span>${ic('right', 16)}</div>`).join('') : empty('Tudo em dia.')}</div>
   </div>
-  <div class="grid g2 mt">
-    <div class="card"><div class="card-h"><h3>Últimas movimentações</h3><button class="btn btn-sm" data-act="go" data-r="extrato">Ver extrato completo</button></div>
-      ${last.map(i => `<div class="list-row" data-act="go" data-r="extrato"><span class="alert-i ${i.k === 'in' ? 'info' : 'bad'}" style="${i.k === 'in' ? 'background:var(--ok-bg);color:var(--ok)' : ''}">${ic(i.k === 'in' ? 'plus' : 'wallet', 16)}</span><div class="grow"><b>${esc(i.desc.length > 46 ? i.desc.slice(0, 46) + '…' : i.desc)}</b><small>${fmtDate(i.date)} · ${esc(i.cat)}${i.who !== '—' ? ' · ' + esc(i.who.split(' ')[0]) : ''}</small></div><b style="color:${i.k === 'in' ? 'var(--ok)' : 'var(--bad)'}">${i.k === 'in' ? '+' : '−'} ${brl(i.valor)}</b></div>`).join('')}</div>
-    <div class="card"><div class="card-h"><h3>Atenção</h3></div>
-      ${alerts.length ? alerts.map(a => `<div class="list-row" data-act="goAlert" data-r="${a[4]}"><span class="alert-i ${a[0]}">${ic(a[1], 18)}</span><div class="grow"><b>${esc(a[2])}</b><small>${esc(a[3])}</small></div>${ic('right', 16)}</div>`).join('') : empty('Tudo em dia.')}</div>
+  <div class="grid g-split mt">
+    <div class="card"><div class="card-h"><h3>${ic('arrowIn', 15)} Entradas por dia</h3><div class="chips">${[15, 30, 60].map(n => `<button class="chip ${UI.dashRange === n ? 'on' : ''}" data-act="dashRange" data-n="${n}">${n} dias</button>`).join('')}</div></div><div class="card-b">${bars(days, { every: Math.ceil(UI.dashRange / 6), h: 170 })}</div></div>
+    <div class="card"><div class="card-h"><h3>${ic('arrowOut', 15)} Para onde foi o dinheiro</h3>${seeAll('gastos', 'Ver gastos')}</div><div class="card-b">
+      ${flows.map(f => hbar(esc(f[0]), f[1], Math.max(base, 1), `${brl0(f[1])} <span class="muted" style="font-weight:400">· ${base ? (f[1] / base * 100).toFixed(0) : 0}%</span>`, f[2])).join('')}</div></div>
   </div>`;
 };
 ACT.dashRange = el => { UI.dashRange = +el.dataset.n; render(); };

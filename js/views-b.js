@@ -110,7 +110,7 @@ VIEWS.comissoes = () => {
   const sts = DB.barbers.map(b => stmt(b.id, m)).filter(s => s.n || s.b.ativo);
   const tot = k => sum(sts, s => s[k]);
   return head + `<div class="grid g4 keep2"><div class="card kpi"><small>Faturamento da equipe</small><b>${brl0(tot('fat'))}</b></div><div class="card kpi"><small>Comissões</small><b>${brl0(tot('com'))}</b></div><div class="card kpi"><small>Gorjetas</small><b>${brl0(tot('tips'))}</b></div><div class="card kpi"><small>Total a pagar à equipe</small><b>${brl0(sum(sts, s => s.paid ? 0 : Math.max(0, s.net)))}</b><div class="sub">${sts.filter(s => s.paid).length} de ${sts.length} já pagos</div></div></div>
-  <div class="card mt"><div class="tbl-wrap"><table class="t"><thead><tr><th>Barbeiro</th><th>Modelo</th><th class="num">Atend.</th><th class="num">Serviços</th><th class="num">Produtos</th><th class="num">Comissão</th><th class="num">Gorjetas</th><th class="num">Vales</th><th class="num">Aluguel</th><th class="num">A pagar</th><th>Status</th></tr></thead><tbody>
+  <div class="card mt"><div class="tbl-wrap"><table class="t"><thead><tr><th>Barbeiro</th><th>Modelo</th><th class="num">Atend.</th><th class="num">Comissão</th><th class="num">Gorjetas</th><th class="num">Vales</th><th class="num">Aluguel</th><th class="num">A pagar</th><th>Status</th></tr></thead><tbody>
   ${sts.map(s => `<tr data-act="comOpen" data-id="${s.b.id}"><td><span class="who-cell">${avatar(s.b, 28)}<b>${esc(s.b.nome)}</b></span></td><td class="muted">${s.b.aluguel ? 'Aluguel' : s.b.comServ + '% / ' + s.b.comProd + '%'}</td><td class="num">${s.n}</td><td class="num">${brl(s.serv)}</td><td class="num">${brl(s.prod)}</td><td class="num">${brl(s.com)}</td><td class="num">${brl(s.tips)}</td><td class="num">${s.vales ? '− ' + brl(s.vales) : '—'}</td><td class="num">${s.aluguel ? '− ' + brl(s.aluguel) : '—'}</td><td class="num"><b>${brl(s.net)}</b></td><td>${s.paid ? badge('Pago ' + fmtDate(s.paid.date), 'ok') : badge(m < ym(TODAY) ? 'Em aberto' : 'Em andamento', m < ym(TODAY) ? 'warn' : 'info')}</td></tr>`).join('')}</tbody>
   <tfoot><tr><td colspan="5">Total</td><td class="num">${brl(tot('com'))}</td><td class="num">${brl(tot('tips'))}</td><td class="num">${brl(tot('vales'))}</td><td class="num">${brl(tot('aluguel'))}</td><td class="num">${brl(tot('net'))}</td><td></td></tr></tfoot></table></div></div>
   <p class="muted mt" style="font-size:13px">Comissão = % sobre o valor líquido de cada venda (já com desconto). Gorjeta é repassada integralmente ao barbeiro. Vales e aluguel de cadeira são descontados do total.</p>`;
@@ -148,3 +148,49 @@ ACT.comRecibo = el => {
     foot: `<button class="btn btn-sm" data-act="printModal">${ic('print', 15)} Imprimir</button><button class="btn btn-sm btn-primary" data-act="closeModal">Fechar</button>`
   });
 };
+
+/* ================= PRODUÇÃO: quanto cada barbeiro fez ================= */
+VIEWS.producao = () => {
+  const m = UI.prodMonth, cur = m === ym(TODAY), mn = MESES[+m.slice(5) - 1];
+  const rows = DB.barbers.map(b => ({ b, st: stmt(b.id, m), h: cur ? rangeTotal(TODAY, TODAY, b.id) : 0, w: cur ? rangeTotal(addDays(TODAY, -6), TODAY, b.id) : 0, pst: stmt(b.id, addMonths(m, -1)) })).filter(r => r.b.ativo || r.st.n).sort((a, b) => b.st.fat - a.st.fat);
+  const T = k => sum(rows, r => r.st[k]), n = T('n'), fat = T('fat'), meta = DB.cfg.metaMes, max = Math.max(...rows.map(r => r.st.fat), 1);
+  const proj = cur ? (openDaysElapsed(m) ? fat / openDaysElapsed(m) * openDaysIn(m) : 0) : fat;
+  return `<div class="page-h"><div><h1>Produção da equipe</h1><p>Quanto cada barbeiro atendeu e faturou. Valores já com desconto, sem gorjeta.</p></div><div class="acts">${monthNav('prodMonth', m)}</div></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Faturamento da equipe</small><b>${brl0(fat)}</b><div class="sub">${brl0(T('serv'))} serviços · ${brl0(T('prod'))} produtos</div></div>
+    <div class="card kpi"><small>Atendimentos</small><b>${n}</b><div class="sub">no mês de ${mn.toLowerCase()}</div></div>
+    <div class="card kpi"><small>Ticket médio</small><b>${brl(n ? fat / n : 0)}</b><div class="sub">por atendimento</div></div>
+    <div class="card kpi"><small>Comissões geradas</small><b>${brl0(T('com'))}</b><div class="sub">${fat ? (T('com') / fat * 100).toFixed(0) : 0}% do faturamento</div></div></div>
+  <div class="card mt"><div class="card-h"><h3>Ranking do mês</h3><span class="muted">Clique no barbeiro para abrir o extrato de comissão</span></div><div class="card-b rank">
+    ${rows.map((r, i) => `<div class="rank-row" data-act="barStmt" data-id="${r.b.id}"><span class="rank-n">${i + 1}</span>${avatar(r.b, 40)}<div class="grow"><div class="hbar-top"><b>${esc(r.b.nome)}</b><b>${brl0(r.st.fat)} ${cur ? '' : delta(r.st.fat, r.pst.fat)}</b></div><div class="hbar-track"><div style="width:${r.st.fat / max * 100}%;background:${r.b.cor}"></div></div></div></div>`).join('')}</div></div>
+  <div class="card mt"><div class="card-h"><h3>Números por barbeiro</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Barbeiro</th>${cur ? '<th class="num">Hoje</th><th class="num">7 dias</th>' : ''}<th class="num">${mn}</th><th class="num">Atend.</th><th class="num">Ticket</th><th class="num">Comissão</th><th class="num">Gorjetas</th><th style="min-width:150px">Meta individual</th></tr></thead><tbody>
+    ${rows.map(r => `<tr data-act="barStmt" data-id="${r.b.id}"><td><span class="who-cell">${avatar(r.b, 28)}<b>${esc(r.b.nome)}</b></span></td>${cur ? `<td class="num">${brl(r.h)}</td><td class="num">${brl(r.w)}</td>` : ''}<td class="num"><b>${brl(r.st.fat)}</b></td><td class="num">${r.st.n}</td><td class="num">${brl(r.st.n ? r.st.fat / r.st.n : 0)}</td><td class="num">${brl(r.st.com)}</td><td class="num">${brl(r.st.tips)}</td><td><div class="progress"><div style="width:${Math.min(100, r.st.fat / r.b.meta * 100)}%"></div></div><span class="muted" style="font-size:12px">${(r.st.fat / r.b.meta * 100).toFixed(0)}% de ${brl0(r.b.meta)}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total da equipe</td>${cur ? `<td class="num">${brl(sum(rows, r => r.h))}</td><td class="num">${brl(sum(rows, r => r.w))}</td>` : ''}<td class="num">${brl(fat)}</td><td class="num">${n}</td><td class="num">${brl(n ? fat / n : 0)}</td><td class="num">${brl(T('com'))}</td><td class="num">${brl(T('tips'))}</td><td></td></tr></tfoot></table></div>
+    <div style="padding:14px 20px;border-top:1px solid var(--line)"><div class="hbar-top"><span>Meta da barbearia</span><b>${brl0(fat)} de ${brl0(meta)}</b></div><div class="progress"><div style="width:${Math.min(100, fat / meta * 100)}%"></div></div><div class="muted" style="font-size:12.5px;margin-top:6px">${cur ? 'Projeção para o fim do mês' : 'Fechamento'}: <b style="color:var(--ink)">${brl0(proj)}</b> (${(proj / meta * 100).toFixed(0)}% da meta)</div></div></div>`;
+};
+
+/* ================= TRAZER DE VOLTA: aniversário, sumidos e brindes ================= */
+const BRINDE_MSG = 'Fala {nome}, você completou o cartão fidelidade na {barbearia}! Seu brinde está te esperando, passa aqui.';
+const aniversariantes = () => DB.clients.map(c => { if (!c.nasc) return null; for (let i = 0; i < 7; i++) if (addDays(TODAY, i).slice(5) === c.nasc.slice(5)) return { c, em: i, idade: +TODAY.slice(0, 4) - +c.nasc.slice(0, 4) }; return null; }).filter(Boolean).sort((a, b) => a.em - b.em);
+const waBtn = (c, tpl, label = 'WhatsApp') => `<a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="${wa(c.tel, fillMsg(tpl, { nome: c.nome.split(' ')[0], barbearia: DB.cfg.nome }))}">${ic('chat', 14)} ${label}</a>`;
+VIEWS.retorno = () => {
+  const ani = aniversariantes();
+  const sum_ = DB.clients.map(c => ({ c, s: cliStats(c) })).filter(x => x.s.tag === 'Sumido').sort((a, b) => b.s.total - a.s.total);
+  const brin = DB.clients.map(c => ({ c, s: cliStats(c) })).filter(x => x.s.brindes > 0);
+  const pot = sum(sum_, x => x.s.ticket), lim = UI.retLimit || 12;
+  return `<div class="page-h"><div><h1>Trazer clientes de volta</h1><p>Quem está de aniversário, quem sumiu e quem ganhou brinde. Um clique abre o WhatsApp com a mensagem pronta.</p></div><div class="acts"><button class="btn" data-act="go" data-r="config">${ic('sliders', 16)} Editar mensagens</button></div></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Aniversários em 7 dias</small><b>${ani.length}</b><div class="sub">mande parabéns e um desconto</div></div>
+    <div class="card kpi"><small>Clientes sumidos</small><b>${sum_.length}</b><div class="sub">mais de 45 dias sem vir</div></div>
+    <div class="card kpi"><small>Receita parada</small><b>${brl0(pot)}</b><div class="sub">se cada sumido voltar uma vez</div></div>
+    <div class="card kpi"><small>Brindes a entregar</small><b>${brin.length}</b><div class="sub">cartão fidelidade completo</div></div></div>
+  <div class="grid g-split mt">
+    <div class="card"><div class="card-h"><h3>${ic('cake', 15)} Aniversariantes · próximos 7 dias</h3></div>
+      ${ani.length ? ani.map(({ c, em, idade }) => `<div class="list-row"><span class="alert-i info">${ic('cake', 18)}</span><div class="grow"><b>${esc(c.nome)}</b><small>${em === 0 ? 'Hoje' : em === 1 ? 'Amanhã' : fmtDate(addDays(TODAY, em), { weekday: 'long', day: '2-digit', month: '2-digit' })} · faz ${idade} anos</small></div>${waBtn(c, DB.cfg.msgAniv, 'Parabéns')}</div>`).join('') : empty('Nenhum aniversário nesta semana.')}</div>
+    <div class="card"><div class="card-h"><h3>${ic('trophy', 15)} Brindes do cartão fidelidade</h3></div>
+      ${brin.length ? brin.slice(0, 8).map(({ c, s }) => `<div class="list-row"><span class="alert-i brass">${ic('heart', 18)}</span><div class="grow"><b>${esc(c.nome)}</b><small>${s.n} visitas · ${s.brindes} brinde(s)</small></div>${waBtn(c, DB.cfg.msgBrinde || BRINDE_MSG, 'Avisar')}<button class="btn btn-sm btn-brass" data-act="cliBrindeRet" data-id="${c.id}">Entregue</button></div>`).join('') + (brin.length > 8 ? `<div class="muted" style="padding:12px 18px">+ ${brin.length - 8} outros clientes com brinde. Veja em Clientes.</div>` : '') : empty('Nenhum brinde pendente.')}</div></div>
+  <div class="card mt"><div class="card-h"><h3>${ic('users', 15)} Sumidos · quem mais gastou aparece primeiro</h3><span class="muted">${sum_.length} cliente(s)</span></div>
+    ${sum_.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Cliente</th><th>Última visita</th><th class="num">Visitas</th><th class="num">Já gastou</th><th class="num">Ticket</th><th></th></tr></thead><tbody>
+    ${sum_.slice(0, lim).map(({ c, s }) => `<tr data-act="cliOpen" data-id="${c.id}"><td><b>${esc(c.nome)}</b><div class="muted" style="font-size:12.5px">${esc(c.tel)}</div></td><td>${fmtFull(s.ultima)} <span class="muted">· há ${s.dias} dias</span></td><td class="num">${s.n}</td><td class="num">${brl(s.total)}</td><td class="num">${brl(s.ticket)}</td><td class="num">${waBtn(c, DB.cfg.msgSumido, 'Chamar')}</td></tr>`).join('')}</tbody></table></div>
+    ${sum_.length > lim ? `<div style="padding:12px 16px"><button class="btn btn-sm" data-act="retMore">Mostrar mais (${sum_.length - lim})</button></div>` : ''}` : empty('Ninguém sumido. Ótimo.')}</div>`;
+};
+ACT.retMore = () => { UI.retLimit = (UI.retLimit || 12) + 20; render(); };
+ACT.cliBrindeRet = el => { const c = client(+el.dataset.id); c.resgates = (c.resgates || 0) + 1; save(); toast('Brinde registrado'); render(); };

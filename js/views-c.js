@@ -1,16 +1,32 @@
 'use strict';
-/* ================= SERVIÇOS E PRODUTOS ================= */
+/* ================= SERVIÇOS E PREÇOS ================= */
 VIEWS.catalogo = () => {
   const m = ym(TODAY), mSales = DB.sales.filter(s => ym(s.date) === m);
-  const tabs = [['servicos', 'Serviços'], ['produtos', 'Produtos e estoque']];
-  const qtd = (t, id) => sum(mSales, s => sum(s.items.filter(i => i.t === t && i.id === id), i => i.qtd));
-  let body;
-  if (UI.catTab === 'servicos') body = `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Serviço</th><th>Categoria</th><th class="num">Duração</th><th class="num">Preço</th><th class="num">Vendas no mês</th><th>Status</th><th></th></tr></thead><tbody>
-    ${DB.services.map(s => `<tr style="${s.ativo ? '' : 'opacity:.5'}"><td><b>${esc(s.nome)}</b></td><td class="muted">${esc(s.cat)}</td><td class="num">${s.dur} min</td><td class="num"><b>${brl(s.preco)}</b></td><td class="num">${qtd('s', s.id)}</td><td>${badge(s.ativo ? 'Ativo' : 'Inativo', s.ativo ? 'ok' : '')}</td><td class="num"><button class="btn btn-sm" data-act="svcEdit" data-id="${s.id}">Editar</button></td></tr>`).join('')}</tbody></table></div></div>`;
-  else body = `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th><th class="num">Margem</th><th class="num">Estoque</th><th class="num">Vendidos no mês</th><th>Situação</th><th></th></tr></thead><tbody>
-    ${DB.products.map(p => { const low = p.estoque <= p.min; return `<tr style="${p.ativo ? '' : 'opacity:.5'}"><td class="cell-2"><b>${esc(p.nome)}</b><small>${esc(p.cat)}</small></td><td class="num">${brl(p.custo)}</td><td class="num"><b>${brl(p.preco)}</b></td><td class="num">${((p.preco - p.custo) / p.preco * 100).toFixed(0)}%</td><td class="num"><b>${p.estoque}</b> <span class="muted">/ mín. ${p.min}</span></td><td class="num">${qtd('p', p.id)}</td><td>${badge(p.estoque === 0 ? 'Sem estoque' : low ? 'Repor' : 'Ok', p.estoque === 0 ? 'bad' : low ? 'warn' : 'ok')}</td><td class="num nowrap"><button class="btn btn-sm" data-act="stockIn" data-id="${p.id}">+ Entrada</button> <button class="btn btn-sm" data-act="prodEdit" data-id="${p.id}">Editar</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
-  return `<div class="page-h"><div><h1>Serviços e produtos</h1><p>Preços, duração, estoque e margem</p></div><div class="acts"><button class="btn btn-primary" data-act="${UI.catTab === 'servicos' ? 'svcNew' : 'prodNew'}">${ic('plus', 16)} ${UI.catTab === 'servicos' ? 'Novo serviço' : 'Novo produto'}</button></div></div>
-  <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${UI.catTab === k ? 'on' : ''}" data-act="catTab" data-k="${k}">${l}</button>`).join('')}</div>${body}`;
+  const qtd = id => sum(mSales, s => sum(s.items.filter(i => i.t === 's' && i.id === id), i => i.qtd));
+  const list = DB.services.map(x => ({ x, q: qtd(x.id) }));
+  const best = list.slice().sort((a, b) => b.q * b.x.preco - a.q * a.x.preco)[0];
+  return `<div class="page-h"><div><h1>Serviços e preços</h1><p>A tabela de preços da barbearia. Mudar um preço aqui vale para os próximos atendimentos.</p></div><div class="acts"><button class="btn btn-primary" data-act="svcNew">${ic('plus', 16)} Novo serviço</button></div></div>
+  <div class="grid g3 keep2"><div class="card kpi"><small>Serviços ativos</small><b>${DB.services.filter(s => s.ativo).length}</b><div class="sub">de ${DB.services.length} cadastrados</div></div>
+    <div class="card kpi"><small>Preço médio</small><b>${brl0(sum(DB.services.filter(s => s.ativo), s => s.preco) / Math.max(1, DB.services.filter(s => s.ativo).length))}</b><div class="sub">entre os serviços ativos</div></div>
+    <div class="card kpi"><small>Mais rentável do mês</small><b style="font-size:28px">${best ? esc(best.x.nome) : '—'}</b><div class="sub">${best ? brl0(best.q * best.x.preco) + ' em ' + best.q + ' vendas' : ''}</div></div></div>
+  <div class="card mt"><div class="tbl-wrap"><table class="t"><thead><tr><th>Serviço</th><th>Categoria</th><th class="num">Duração</th><th class="num">Preço</th><th class="num">Vendas no mês</th><th class="num">Receita no mês</th><th>Status</th><th></th></tr></thead><tbody>
+    ${list.map(({ x: s, q }) => `<tr style="${s.ativo ? '' : 'opacity:.5'}"><td><b>${esc(s.nome)}</b></td><td class="muted">${esc(s.cat)}</td><td class="num">${s.dur} min</td><td class="num"><b>${brl(s.preco)}</b></td><td class="num">${q}</td><td class="num">${brl0(q * s.preco)}</td><td>${badge(s.ativo ? 'Ativo' : 'Inativo', s.ativo ? 'ok' : '')}</td><td class="num"><button class="btn btn-sm" data-act="svcEdit" data-id="${s.id}">Editar</button></td></tr>`).join('')}</tbody></table></div></div>`;
+};
+
+/* ================= ESTOQUE ================= */
+VIEWS.estoque = () => {
+  const m = ym(TODAY), mSales = DB.sales.filter(s => ym(s.date) === m), act = DB.products.filter(p => p.ativo);
+  const qtd = id => sum(mSales, s => sum(s.items.filter(i => i.t === 'p' && i.id === id), i => i.qtd));
+  const repor = act.filter(p => p.estoque <= p.min).map(p => { const q = Math.max(1, p.min * 2 - p.estoque); return { p, q, custo: q * p.custo }; });
+  return `<div class="page-h"><div><h1>Estoque</h1><p>O que tem na prateleira, o que precisa comprar e quanto cada produto rende.</p></div><div class="acts"><button class="btn btn-primary" data-act="prodNew">${ic('plus', 16)} Novo produto</button></div></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Produtos ativos</small><b>${act.length}</b><div class="sub">${sum(act, p => p.estoque)} unidades no total</div></div>
+    <div class="card kpi"><small>Dinheiro parado</small><b>${brl0(sum(act, p => p.estoque * p.custo))}</b><div class="sub">estoque a preço de custo</div></div>
+    <div class="card kpi"><small>Se vender tudo</small><b>${brl0(sum(act, p => p.estoque * p.preco))}</b><div class="sub">lucro de ${brl0(sum(act, p => p.estoque * (p.preco - p.custo)))}</div></div>
+    <div class="card kpi" style="${repor.length ? 'border-color:var(--warn)' : ''}"><small>Precisam de reposição</small><b>${repor.length}</b><div class="sub">no mínimo ou abaixo</div></div></div>
+  ${repor.length ? `<div class="card mt"><div class="card-h"><h3>${ic('box', 15)} Lista de compras sugerida</h3><span class="muted">Repõe até o dobro do mínimo · custo estimado <b style="color:var(--ink)">${brl(sum(repor, r => r.custo))}</b></span></div>
+    ${repor.map(r => `<div class="list-row"><span class="alert-i ${r.p.estoque === 0 ? 'bad' : 'warn'}">${ic('box', 18)}</span><div class="grow"><b>${esc(r.p.nome)}</b><small>Tem ${r.p.estoque} · mínimo ${r.p.min}</small></div><b>Comprar ${r.q}</b><span class="muted nowrap" style="min-width:80px;text-align:right">${brl(r.custo)}</span><button class="btn btn-sm" data-act="stockIn" data-id="${r.p.id}">+ Entrada</button></div>`).join('')}</div>` : ''}
+  <div class="card mt"><div class="card-h"><h3>Todos os produtos</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Produto</th><th class="num">Custo</th><th class="num">Preço</th><th class="num">Margem</th><th class="num">Estoque</th><th class="num">Vendidos no mês</th><th>Situação</th><th></th></tr></thead><tbody>
+    ${DB.products.map(p => { const low = p.estoque <= p.min; return `<tr style="${p.ativo ? '' : 'opacity:.5'}"><td class="cell-2"><b>${esc(p.nome)}</b><small>${esc(p.cat)}</small></td><td class="num">${brl(p.custo)}</td><td class="num"><b>${brl(p.preco)}</b></td><td class="num">${((p.preco - p.custo) / p.preco * 100).toFixed(0)}%</td><td class="num"><b>${p.estoque}</b> <span class="muted">/ mín. ${p.min}</span></td><td class="num">${qtd(p.id)}</td><td>${badge(p.estoque === 0 ? 'Sem estoque' : low ? 'Repor' : 'Ok', p.estoque === 0 ? 'bad' : low ? 'warn' : 'ok')}</td><td class="num nowrap"><button class="btn btn-sm" data-act="stockIn" data-id="${p.id}">+ Entrada</button> <button class="btn btn-sm" data-act="prodEdit" data-id="${p.id}">Editar</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
 };
 ACT.catTab = el => { UI.catTab = el.dataset.k; render(); };
 ACT.svcNew = () => svcForm({ nome: '', cat: 'Cabelo', preco: 50, dur: 30, ativo: true });
@@ -34,19 +50,16 @@ ACT.prodSave = el => { const f = $('#f-prod'), d = formData(f); if (!d.nome.trim
 ACT.stockIn = el => { const p = product(+el.dataset.id); openModal({ title: 'Entrada de estoque · ' + esc(p.nome), body: `<form id="f-stock" class="form-grid" onsubmit="return false">${fld('Quantidade recebida', inp('qtd', 12, 'number', 'min="1"'))}${fld('Valor total da compra (R$)', inp('total', (p.custo * 12).toFixed(2), 'number', 'min="0" step="0.01"'))}<label class="check full"><input type="checkbox" name="lanca" checked> Lançar a compra como despesa no financeiro</label></form>`, foot: `<button class="btn" data-act="closeModal">Cancelar</button><button class="btn btn-primary" data-act="stockSave" data-id="${p.id}">Registrar entrada</button>` }); };
 ACT.stockSave = el => { const f = $('#f-stock'), d = formData(f), p = product(+el.dataset.id), q = num2(d.qtd), tot = num2(d.total); if (q < 1) return toast('Informe a quantidade', 'bad'); p.estoque += q; if (tot && q) p.custo = tot / q; if (f.lanca.checked && tot) DB.expenses.push({ id: nextId(), date: TODAY, descricao: `Compra: ${p.nome} (${q} un.)`, categoria: 'Estoque de revenda', valor: tot, pago: true }); save(); closeModal(); toast('Estoque atualizado'); render(); };
 
-/* ================= FINANCEIRO ================= */
+/* ================= LUCRO DO MÊS (resultado) ================= */
 const EXP_CATS = ['Aluguel', 'Contas', 'Serviços', 'Marketing', 'Material de consumo', 'Estoque de revenda', 'Equipamentos', 'Impostos', 'Outros'];
+const expStat = e => e.pago ? ['Pago', 'ok'] : e.date < TODAY ? ['Em atraso', 'bad'] : ['A pagar', 'warn'];
 VIEWS.financeiro = () => {
   const m = UI.finMonth, s = monthStats(m), pm = monthStats(addMonths(m, -1));
   const pmBruta = s.parcial ? sum(pm.sales.filter(x => +x.date.slice(8) <= +TODAY.slice(8)), x => calcSale(x).total) : pm.bruta;
   const base = s.bruta + s.aluguel;
-  let exps = s.exps.slice().sort((a, b) => a.date.localeCompare(b.date));
-  const stat = e => e.pago ? ['Pago', 'ok'] : e.date < TODAY ? ['Em atraso', 'bad'] : ['A pagar', 'warn'];
-  if (UI.finFilter === 'pendentes') exps = exps.filter(e => !e.pago);
-  const cats = {}; s.exps.forEach(e => cats[e.categoria] = (cats[e.categoria] || 0) + e.valor);
-  const catList = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   const last = Array.from({ length: 6 }, (_, i) => addMonths(m, i - 5)).map(x => ({ x, s: monthStats(x) }));
-  return `<div class="page-h"><div><h1>Financeiro</h1><p>${s.parcial ? "Mês em andamento: despesas contabilizadas até hoje e aluguel de cadeira proporcional" : "Receitas, despesas e lucro do mês"}</p></div><div class="acts">${monthNav('finMonth', m)}<button class="btn btn-primary" data-act="expNew">${ic('plus', 16)} Nova despesa</button></div></div>
+  const fixos = sum(s.exps, e => e.valor), varPct = base ? (s.comiss + s.taxas) / base : 0, equil = varPct < 1 ? fixos / (1 - varPct) : 0;
+  return `<div class="page-h"><div><h1>Lucro do mês</h1><p>${s.parcial ? "Mês em andamento: despesas contabilizadas até hoje e aluguel de cadeira proporcional" : "O que entrou, o que saiu e o que sobrou"}</p></div><div class="acts">${monthNav('finMonth', m)}<button class="btn" data-act="go" data-r="gastos">${ic('arrowOut', 16)} Ver gastos</button></div></div>
   <div class="grid g4 keep2"><div class="card kpi"><small>Receita bruta</small><b>${brl0(s.bruta)}</b><div class="kpi-line">${delta(s.bruta, pmBruta)}<span class="sub">${s.parcial ? "vs. mês anterior até hoje" : "vs. mês anterior"}</span></div></div>
     <div class="card kpi"><small>Despesas fixas e variáveis</small><b>${brl0(s.despesas)}</b><div class="sub">${s.exps.filter(e => !e.pago).length} pendente(s)</div></div>
     <div class="card kpi"><small>Comissões da equipe</small><b>${brl0(s.comiss)}</b><div class="sub">${base ? (s.comiss / base * 100).toFixed(0) : 0}% da receita</div></div>
@@ -55,15 +68,46 @@ VIEWS.financeiro = () => {
     <dt>Serviços</dt><dd>${brl(s.serv)}</dd><dt>Produtos</dt><dd>${brl(s.prod)}</dd>${s.aluguel ? `<dt>Aluguel de cadeiras recebido</dt><dd>${brl(s.aluguel)}</dd>` : ''}<dt><b>Receita total</b></dt><dd><b>${brl(base)}</b></dd>
     <dt>(−) Comissões da equipe</dt><dd>${brl(s.comiss)}</dd><dt>(−) Taxas de cartão</dt><dd>${brl(s.taxas)}</dd><dt>(−) Despesas</dt><dd>${brl(s.despesas)}</dd>
     <dt class="tot">Lucro líquido</dt><dd class="tot" style="color:${s.lucro >= 0 ? 'var(--ok)' : 'var(--bad)'}">${brl(s.lucro)}</dd></dl></div></div>
-    <div class="card"><div class="card-h"><h3>Receita e lucro · últimos 6 meses</h3></div><div class="card-b">${bars(last.map(l => ({ v: Math.max(l.s.lucro, 0), l: MESES[+l.x.slice(5) - 1].slice(0, 3), hl: l.x === m, t: `${mLabel(l.x)} · lucro ${brl(l.s.lucro)} · receita ${brl(l.s.bruta)}` })), { h: 150, every: 1 })}
+    <div class="card"><div class="card-h"><h3>Lucro · últimos 6 meses</h3></div><div class="card-b">${bars(last.map(l => ({ v: Math.max(l.s.lucro, 0), l: MESES[+l.x.slice(5) - 1].slice(0, 3), hl: l.x === m, t: `${mLabel(l.x)} · lucro ${brl(l.s.lucro)} · receita ${brl(l.s.bruta)}` })), { h: 150, every: 1 })}
     <div class="muted" style="font-size:12.5px;margin-top:26px">Barras mostram o lucro líquido de cada mês. Passe o mouse para ver a receita.</div></div></div></div>
-  <div class="grid g2 mt"><div class="card"><div class="card-h"><h3>Recebimentos por forma de pagamento</h3></div><div class="card-b">${Object.keys(PAG).map(k => hbar(PAG[k], s.porPag[k], s.bruta, `${brl0(s.porPag[k])} <span class="muted" style="font-weight:400">· ${s.bruta ? (s.porPag[k] / s.bruta * 100).toFixed(0) : 0}%</span>`)).join('')}</div></div>
-    <div class="card"><div class="card-h"><h3>Despesas por categoria</h3></div><div class="card-b">${catList.length ? catList.map(([k, v]) => hbar(esc(k), v, catList[0][1], `${brl0(v)}`, 'var(--brass)')).join('') : empty('Sem despesas.')}</div></div></div>
-  <div class="card mt"><div class="card-h"><h3>Contas e despesas</h3><div class="chips">${[['todas', 'Todas'], ['pendentes', 'Pendentes']].map(([k, l]) => `<button class="chip ${UI.finFilter === k ? 'on' : ''}" data-act="finFilter" data-k="${k}">${l}</button>`).join('')}</div></div>
-  ${exps.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Status</th><th></th></tr></thead><tbody>
-  ${exps.map(e => { const st = stat(e); return `<tr><td>${fmtFull(e.date)}</td><td><b>${esc(e.descricao)}</b></td><td class="muted">${esc(e.categoria)}</td><td class="num">${brl(e.valor)}</td><td>${badge(st[0], st[1])}</td><td class="num nowrap">${e.pago ? '' : `<button class="btn btn-sm btn-brass" data-act="expPay" data-id="${e.id}">Pagar</button> `}<button class="btn btn-sm" data-act="expEdit" data-id="${e.id}">Editar</button></td></tr>`; }).join('')}</tbody>
-  <tfoot><tr><td colspan="3">Total</td><td class="num">${brl(sum(exps, e => e.valor))}</td><td colspan="2"></td></tr></tfoot></table></div>` : empty('Nenhuma despesa neste filtro.')}</div>`;
+  <div class="grid g2 mt"><div class="card"><div class="card-h"><h3>${ic('target', 15)} Ponto de equilíbrio</h3><span class="muted">estimativa do mês</span></div><div class="card-b">
+    <p class="muted-p">Para fechar o mês sem prejuízo, a barbearia precisa faturar cerca de <b style="color:var(--ink)">${brl0(equil)}</b>. Isso cobre ${brl0(fixos)} de despesas do mês e a parte que vai para comissões e taxas (${(varPct * 100).toFixed(0)}% de cada real).</p>
+    <div style="margin-top:14px">${hbar('Já faturado no mês', base, Math.max(equil, base, 1), `${brl0(base)} <span class="muted" style="font-weight:400">· ${equil ? Math.min(999, base / equil * 100).toFixed(0) : 0}% do equilíbrio</span>`, base >= equil ? 'var(--ok)' : 'var(--brass)')}</div></div></div>
+    <div class="card"><div class="card-h"><h3>Recebimentos por forma de pagamento</h3></div><div class="card-b">${Object.keys(PAG).map(k => hbar(PAG[k], s.porPag[k], s.bruta, `${brl0(s.porPag[k])} <span class="muted" style="font-weight:400">· ${s.bruta ? (s.porPag[k] / s.bruta * 100).toFixed(0) : 0}%</span>`)).join('')}</div></div></div>`;
 };
+
+/* ================= GASTOS E CONTAS (tudo que sai) ================= */
+VIEWS.gastos = () => {
+  const m = UI.gasMonth, s = monthStats(m), all = s.exps.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const pago = sum(all.filter(e => e.pago), e => e.valor), atr = DB.expenses.filter(e => !e.pago && e.date < TODAY), aPagar = all.filter(e => !e.pago && e.date >= TODAY);
+  const cats = {}; all.forEach(e => cats[e.categoria] = (cats[e.categoria] || 0) + e.valor);
+  const catList = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const f = UI.gasFilter; let list = all;
+  if (f === 'pagar') list = all.filter(e => !e.pago && e.date >= TODAY); else if (f === 'atraso') list = atr; else if (f === 'pagas') list = all.filter(e => e.pago);
+  if (UI.gasCat) list = list.filter(e => e.categoria === UI.gasCat);
+  const prox = DB.expenses.filter(e => !e.pago).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
+  const total = sum(all, e => e.valor), saiu = s.despesas + s.comiss + s.taxas;
+  const parts = [['Despesas', s.despesas, 'var(--brass)', null], ['Comissões', s.comiss, 'var(--ink)', 'comissoes'], ['Taxas de cartão', s.taxas, '#9a9aa2', null]];
+  return `<div class="page-h"><div><h1>Gastos e contas</h1><p>Tudo que a barbearia paga: aluguel, contas, produtos, material. Marque como paga quando sair do caixa.</p></div><div class="acts">${monthNav('gasMonth', m)}<button class="btn btn-primary" data-act="expNew">${ic('plus', 16)} Nova despesa</button></div></div>
+  <div class="grid g4 keep2"><div class="card kpi"><small>Despesas do mês</small><b>${brl0(total)}</b><div class="sub">${all.length} lançamento(s)</div></div>
+    <div class="card kpi"><small>Já pago</small><b style="color:var(--ok)">${brl0(pago)}</b><div class="sub">${all.filter(e => e.pago).length} conta(s)</div></div>
+    <div class="card kpi"><small>A pagar</small><b>${brl0(sum(aPagar, e => e.valor))}</b><div class="sub">${aPagar.length} conta(s) a vencer</div></div>
+    <div class="card kpi" style="${atr.length ? 'border-color:var(--bad)' : ''}"><small>Em atraso</small><b style="color:${atr.length ? 'var(--bad)' : 'inherit'}">${brl0(sum(atr, e => e.valor))}</b><div class="sub">${atr.length ? atr.length + ' conta(s) vencida(s) em qualquer mês' : 'nenhuma conta vencida'}</div></div></div>
+  <div class="card mt"><div class="card-h"><h3>Tudo que saiu em ${mLabel(m)}</h3><span class="muted">${brl0(saiu)} no total</span></div><div class="card-b">
+    <div class="stack">${parts.map(p => `<span style="width:${saiu ? p[1] / saiu * 100 : 0}%;background:${p[2]}" title="${p[0]} ${brl0(p[1])}"></span>`).join('')}</div>
+    <div class="stack-leg">${parts.map(p => `<div><i style="background:${p[2]}"></i><span>${p[0]}</span><b>${brl0(p[1])}</b>${p[3] ? `<button class="link-btn" data-act="go" data-r="${p[3]}">ver ${ic('right', 12)}</button>` : ''}</div>`).join('')}</div></div></div>
+  <div class="grid g-split mt">
+    <div class="card"><div class="card-h"><h3>${ic('clock', 15)} Próximas contas</h3><span class="muted">em aberto, mais antigas primeiro</span></div>
+      ${prox.length ? prox.map(e => { const st = expStat(e); return `<div class="list-row"><span class="alert-i ${st[1] === 'bad' ? 'bad' : 'warn'}">${ic(st[1] === 'bad' ? 'alert' : 'clock', 18)}</span><div class="grow"><b>${esc(e.descricao)}</b><small>${st[1] === 'bad' ? 'Venceu em ' : 'Vence em '}${fmtFull(e.date)} · ${esc(e.categoria)}</small></div><b>${brl(e.valor)}</b><button class="btn btn-sm btn-brass" data-act="expPay" data-id="${e.id}">Pagar</button></div>`; }).join('') : empty('Nenhuma conta em aberto.')}</div>
+    <div class="card"><div class="card-h"><h3>Gastos por categoria</h3></div><div class="card-b">${catList.length ? catList.map(([k, v]) => hbar(esc(k), v, catList[0][1], `${brl0(v)} <span class="muted" style="font-weight:400">· ${total ? (v / total * 100).toFixed(0) : 0}%</span>`, 'var(--brass)')).join('') : empty('Sem despesas.')}</div></div></div>
+  <div class="card mt"><div class="card-h"><h3>Lançamentos de ${mLabel(m)}</h3><div class="toolbar" style="margin:0"><div class="chips">${[['todas', 'Todas'], ['pagar', 'A pagar'], ['atraso', 'Em atraso'], ['pagas', 'Pagas']].map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="gasFilter" data-k="${k}">${l}</button>`).join('')}</div>
+    <select data-change="gasCat" style="width:auto" aria-label="Categoria"><option value="">Todas as categorias</option>${EXP_CATS.map(c => `<option ${UI.gasCat === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>
+  ${list.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Status</th><th></th></tr></thead><tbody>
+  ${list.map(e => { const st = expStat(e); return `<tr><td>${fmtFull(e.date)}</td><td><b>${esc(e.descricao)}</b></td><td class="muted">${esc(e.categoria)}</td><td class="num">${brl(e.valor)}</td><td>${badge(st[0], st[1])}</td><td class="num nowrap">${e.pago ? '' : `<button class="btn btn-sm btn-brass" data-act="expPay" data-id="${e.id}">Pagar</button> `}<button class="btn btn-sm" data-act="expEdit" data-id="${e.id}">Editar</button></td></tr>`; }).join('')}</tbody>
+  <tfoot><tr><td colspan="3">Total</td><td class="num">${brl(sum(list, e => e.valor))}</td><td colspan="2"></td></tr></tfoot></table></div>` : empty('Nenhuma despesa neste filtro.')}</div>`;
+};
+ACT.gasFilter = el => { UI.gasFilter = el.dataset.k; render(); };
+CHG.gasCat = el => { UI.gasCat = el.value; render(); };
 ACT.finFilter = el => { UI.finFilter = el.dataset.k; render(); };
 ACT.expPay = el => { M.expenses.get(+el.dataset.id).pago = true; save(); toast('Conta marcada como paga'); render(); };
 ACT.expNew = () => expForm({ date: TODAY, categoria: 'Contas', pago: false });

@@ -1,11 +1,30 @@
 'use strict';
+/* Menu organizado por DESTINO: cada grupo responde "o que eu vou fazer aqui?" */
 const NAV = [
-  ['Visão do dono', [['dashboard', 'Painel', 'grid', ['dono']], ['extrato', 'Extrato', 'list', ['dono']], ['financeiro', 'Financeiro', 'wallet', ['dono']], ['relatorios', 'Relatórios', 'chart', ['dono']]]],
-  ['Operação', [['caixa', 'Caixa', 'receipt', ['dono', 'recepcao']], ['clientes', 'Clientes', 'users', ['dono', 'recepcao', 'barbeiro']], ['catalogo', 'Serviços e produtos', 'box', ['dono', 'recepcao']]]],
-  ['Equipe', [['barbeiros', 'Barbeiros', 'scissors', ['dono']], ['comissoes', 'Comissões', 'percent', ['dono', 'barbeiro']]]],
-  ['Sistema', [['config', 'Configurações', 'sliders', ['dono']]]]
+  ['Hoje', 'Dia a dia do balcão', [
+    ['dashboard', 'Painel', 'home', ['dono'], 'Resumo e avisos'],
+    ['caixa', 'Caixa', 'receipt', ['dono', 'recepcao'], 'Lançar e fechar o dia']]],
+  ['Dinheiro', 'Entradas, saídas e lucro', [
+    ['extrato', 'Entradas e saídas', 'list', ['dono'], 'Extrato do caixa'],
+    ['gastos', 'Gastos e contas', 'arrowOut', ['dono'], 'Contas a pagar'],
+    ['financeiro', 'Lucro do mês', 'trend', ['dono'], 'Resultado e margem'],
+    ['relatorios', 'Relatórios', 'chart', ['dono'], 'Mais vendidos e picos']]],
+  ['Equipe', 'Barbeiros e produção', [
+    ['producao', 'Produção', 'trophy', ['dono'], 'Quanto cada um fez'],
+    ['comissoes', 'Comissões', 'percent', ['dono', 'barbeiro'], 'Fechar e pagar'],
+    ['barbeiros', 'Cadastro e regras', 'scissors', ['dono'], 'Percentuais e metas']]],
+  ['Clientes', 'Quem frequenta a casa', [
+    ['clientes', 'Clientes', 'users', ['dono', 'recepcao', 'barbeiro'], 'Histórico e contatos'],
+    ['retorno', 'Trazer de volta', 'heart', ['dono', 'recepcao'], 'Aniversário e sumidos']]],
+  ['Produtos e preços', 'O que a casa vende', [
+    ['catalogo', 'Serviços e preços', 'tag', ['dono', 'recepcao'], 'Tabela de serviços'],
+    ['estoque', 'Estoque', 'box', ['dono', 'recepcao'], 'Reposição e margem']]],
+  ['Sistema', 'Ajustes da barbearia', [
+    ['config', 'Configurações', 'sliders', ['dono'], 'Horários e taxas']]]
 ];
-const allowed = r => NAV.some(g => g[1].some(n => n[0] === r && n[3].includes(SESSION.role)));
+const navGroup = r => NAV.find(g => g[2].some(n => n[0] === r));
+const navItem = r => NAV.flatMap(g => g[2]).find(n => n[0] === r);
+const allowed = r => NAV.some(g => g[2].some(n => n[0] === r && n[3].includes(SESSION.role)));
 const firstRoute = () => ({ dono: 'dashboard', recepcao: 'caixa', barbeiro: 'comissoes' })[SESSION.role];
 
 function loginScreen() {
@@ -26,7 +45,7 @@ ACT.logout = () => { try { sessionStorage.removeItem('bm-session'); } catch (e) 
 function shell() {
   const me = SESSION.role === 'barbeiro' ? barber(SESSION.me) : null;
   $('#root').innerHTML = `<div class="app"><aside class="side" id="side"><span class="wordmark">${esc(DB.cfg.nome)}</span><nav class="nav" aria-label="Menu principal">
-    ${NAV.map(([g, items]) => { const v = items.filter(i => i[3].includes(SESSION.role)); return v.length ? `<div class="nav-g">${g}</div>${v.map(i => `<a data-act="go" data-r="${i[0]}" data-nav="${i[0]}">${ic(i[2])}${i[1]}</a>`).join('')}` : ''; }).join('')}</nav>
+    ${NAV.map(([g, , items]) => { const v = items.filter(i => i[3].includes(SESSION.role)); return v.length ? `<div class="nav-g">${g}</div>${v.map(i => `<a data-act="go" data-r="${i[0]}" data-nav="${i[0]}" title="${esc(i[4])}">${ic(i[2])}<span class="nav-t">${i[1]}<small>${i[4]}</small></span></a>`).join('')}` : ''; }).join('')}</nav>
     <div class="side-foot"><div class="who">${me ? avatar(me, 32) : `<span class="avatar" style="--c:#3a3a40;width:32px;height:32px;font-size:12px">${SESSION.role === 'dono' ? 'DN' : 'RC'}</span>`}<div>${me ? esc(me.nome) : SESSION.role === 'dono' ? 'Proprietário' : 'Recepção'}<small>${{ dono: 'Acesso total', recepcao: 'Recepção', barbeiro: 'Barbeiro' }[SESSION.role]}</small></div></div>
     <a class="nav" style="display:block"><button class="btn btn-block" style="background:transparent;color:var(--side-ink);border-color:#2f2f35" data-act="logout">${ic('logout', 16)} Sair</button></a></div></aside>
     <div><div class="topbar"><button class="icon-btn" data-act="toggleNav" aria-label="Abrir menu">${ic('menu', 22)}</button><span class="wordmark" style="font-size:17px">${esc(DB.cfg.nome)}</span></div><main class="main" id="view"></main></div></div>`;
@@ -38,6 +57,8 @@ function render(top) {
   if (!allowed(UI.route)) UI.route = firstRoute();
   const v = $('#view'); const y = window.scrollY;
   v.innerHTML = VIEWS[UI.route]();
+  const ng = navGroup(UI.route), box = $('.page-h > div:first-child', v);
+  if (ng && box) box.insertAdjacentHTML('afterbegin', `<span class="eyebrow">${ng[0]} <i>/</i> ${esc(navItem(UI.route)[1])}</span>`);
   if (!$('.demo-tag')) { const h = $('.page-h h1, .hero h1', v); if (h) h.insertAdjacentHTML('beforeend', '<span class="demo-tag">Demonstração</span>'); }
   $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === UI.route));
   document.body.classList.remove('nav-open');
